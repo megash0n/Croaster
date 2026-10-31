@@ -153,6 +153,11 @@ public:
      */
     void toggleDummyData();
 
+    // Local change to upstream: read-only access to useDummyData for boards that report it (T65).
+    bool dummyDataEnabled() const {
+        return useDummyData;
+    }
+
     /**
      * @brief Starts (or resumes) the roast timer.
      */

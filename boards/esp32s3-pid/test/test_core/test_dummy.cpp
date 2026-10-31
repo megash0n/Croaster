@@ -11,15 +11,19 @@
 
 namespace {
 
-std::string readCoreSource() {
+std::string readSource(const char* path) {
     // __FILE__ is absolute or relative to boards/esp32s3-pid, where `pio test` runs.
     std::string here = __FILE__;
     size_t cut = here.rfind("boards/esp32s3-pid/test/");
     std::string root = cut == std::string::npos ? "../../" : here.substr(0, cut);
-    std::ifstream f(root + "croaster/src/CroasterCore.cpp");
+    std::ifstream f(root + path);
     std::stringstream ss;
     ss << f.rdbuf();
     return ss.str();
+}
+
+std::string readCoreSource() {
+    return readSource("croaster/src/CroasterCore.cpp");
 }
 
 std::string between(const std::string& s, const char* from, const char* to) {
@@ -67,7 +71,21 @@ void test_dummy_reading_ranges() {
     }
 }
 
+// The page's Fake readings button follows data "dummy" (T65): Croaster's getter
+// returns useDummyData unchanged and ControlPlugin writes it into every payload.
+void test_dummy_state_in_data() {
+    const std::string header = readSource("croaster/src/CroasterCore.h");
+    const std::string getter = between(header, "bool dummyDataEnabled() const {", "}");
+    TEST_ASSERT_FALSE(getter.empty());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, getter.find("return useDummyData;"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, header.find("void toggleDummyData();"));
+    const std::string plugin = readSource("croaster-control/src/app/ControlPlugin.cpp");
+    const std::string hook = between(plugin, "app.core().onJsonData(", "});");
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, hook.find("data[\"dummy\"] = app_->core().dummyDataEnabled();"));
+}
+
 void runDummyTests() {
     RUN_TEST(test_dummy_readings_use_display_unit);
     RUN_TEST(test_dummy_reading_ranges);
+    RUN_TEST(test_dummy_state_in_data);
 }

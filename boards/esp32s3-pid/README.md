@@ -195,7 +195,8 @@ yaeger's flat keys (`{"BurnerVal":v}` without `"command"`) are not accepted.
 | `{"command":"getPreferences","id":N}` | `{"id":N,"data":{"type":"preferences","pidKp",...,"cooldownFanSpeed"}}` |
 
 Data broadcasts gain `BurnerVal`, `FanVal`, `SV`, `Mode`, `trip`, `autotune`,
-`Amb`, `Target`, `pidKp`/`pidKi`/`pidKd`, `wifiStrength`, and `atTarget` (the
+`Amb`, `Target`, `pidKp`/`pidKi`/`pidKd`, `wifiStrength`, `dummy` (fake
+readings on), and `atTarget` (the
 autotune test point) during autotune. `autotune` holds the last autotune
 status in the display unit: `idle`, `running: heating to 300 F (1/3)`,
 `running: cycle 3/6 at 350 F (2/3)`, `results ready`, `done`, `discarded`,

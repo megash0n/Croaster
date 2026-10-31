@@ -173,3 +173,11 @@ test('eventAllowed: nothing before Start, Charge first, later events in order, D
   assert.deepEqual(allowed(ses(false, ['CHARGE', 'FC_START'])), []); // ended
   assert.equal(R.eventAllowed(ses(true, ['CHARGE']), 'NOPE'), false);
 });
+
+test('dummyState reads the fake readings flag from a data payload', () => {
+  assert.equal(R.dummyState({ BT: 20, dummy: true }), true);
+  assert.equal(R.dummyState({ BT: 20, dummy: false }), false);
+  assert.equal(R.dummyState({ BT: 20 }), null); // Croaster Monitor and older firmware
+  assert.equal(R.dummyState({ dummy: 1 }), null);
+  assert.equal(R.dummyState(null), null);
+});

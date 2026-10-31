@@ -323,7 +323,7 @@
           <h2>Maintenance</h2>
           <div class="row-buttons">
             <button type="button" data-cmd='{"command":"restartesp"}' data-confirm="Restart the board? The heater turns off and this page reconnects.">Restart</button>
-            <button type="button" data-cmd='{"command":"dummyToggle"}' data-confirm="Switch fake readings on or off? Charts and Artisan show the fake values while it is on.">Fake readings</button>
+            <button type="button" id="dummy-toggle" aria-pressed="false" data-cmd='{"command":"dummyToggle"}' data-confirm="Switch fake readings on or off? Charts and Artisan show the fake values while it is on.">Fake readings</button>
             <button type="button" data-cmd='{"command":"erase"}' data-confirm="Erase the saved WiFi network and reboot? The board opens its setup access point afterwards.">Erase WiFi</button>
           </div>
           <form class="field wide" data-send="wifiConnect" data-confirm="Join this network now? The board drops the current connection, and this page loses it too if the network differs.">

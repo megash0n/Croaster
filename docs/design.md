@@ -324,6 +324,7 @@ New 2026-10-31, open for Shawn:
 | D30 | Autotune fan test, fan and ramp feedforward, fan assist. |
 | D31 | Recipe ramp shapes (rate-of-climb curves), power ramps, charge temperature, ramp feasibility check. |
 | D32 | Setpoint ramps start at the PID input (BT) when the step applies, with a bumpless PID restart. |
+| D33 | Fake readings button is green while dummy mode is on, from a `dummy` data field. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1652,6 +1653,37 @@ first ramp.
   `RampShape.rampStartEstimate`.
 - **To confirm:** start at the PID input rather than BT when the PID input
   is ET or MAX; the unreadable-input fallback; no downward ramps.
+
+### D33. Fake readings button shows its state — new 2026-10-31, open for Shawn
+Shawn asked for Maintenance > Fake readings to be green while dummy mode is
+on, so a board left on fake values is obvious.
+
+- **Source of the state.** Croaster keeps the flag in the private member
+  `CroasterCore::useDummyData` and reports it nowhere. A one-line public
+  getter `bool dummyDataEnabled() const` returns it unchanged (local change
+  to upstream, marked in the header, could be offered upstream; the member
+  and `toggleDummyData()` keep their names). Tracking toggles in
+  croaster-control instead would miss serial and BLE `dummyToggle` and
+  depend on the order of Croaster's command dispatch.
+- **Transport.** `ControlPlugin`'s existing `onJsonData` hook adds
+  `"dummy": true|false` to every data payload, so `getArtisanData` (polled
+  each second) and the broadcasts carry it. No new poll and no change to
+  `dummyToggle`, which still replies nothing. Artisan and the ICRM app
+  ignore the extra key. Croaster Monitor does not add it: its page has no
+  Controls tab, where the button lives.
+- **Page.** `Roast.dummyState(data)` gives true, false or null (not
+  reported). The page keeps the value from the last data reply and clears it
+  when the link drops or reopens, so after a reload or reconnect the button
+  shows off until the board's first reply, then the real state within about
+  a second. A switch shows within about a second too. Style: `.row-buttons
+  button.on`, filled with the theme's `--ok` green, plus `aria-pressed`.
+  Monitoring > Telemetry lists the field as "Fake readings".
+- **Cost:** `esp32s3-pid` RAM 66 768 B (unchanged), flash 2 039 119 B
+  (+496); monitor flash 1 762 027 B (+384, page only); page 62 668 B
+  gzipped (+390).
+- **New names, pending Shawn's confirmation:** data field `dummy`,
+  `CroasterCore::dummyDataEnabled()`, page `dummyState`, CSS class `on`
+  on Maintenance buttons, element id `dummy-toggle`.
 
 ## Build platform and sdkconfig
 - Default: `platformio/espressif32 @ 8.0.0` (Arduino-ESP32 3.3.12, IDF 5.5).

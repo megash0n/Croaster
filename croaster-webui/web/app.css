@@ -195,6 +195,11 @@ main { min-width: 0; display: flex; flex-direction: column; gap: var(--gap); }
 }
 .events button.charge { border-color: var(--bt); }
 .events button.drop { border-color: var(--et); }
+/* Fake readings on (the board reports "dummy": true). */
+.row-buttons button.on {
+  background: var(--ok); border-color: var(--ok);
+  color: color-mix(in srgb, var(--ok), #000 88%); font-weight: 600;
+}
 .row-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--gap); }

@@ -277,6 +277,23 @@ Bench run (after a saved autotune):
    goes to 290 °F at once, no ramp line, the heater falls as the PID holds
    290 °F.
 
+## Fake readings button state (D33, T65)
+- `CroasterCore::dummyDataEnabled()` returns `useDummyData` unchanged; ControlPlugin's data hook writes it as `dummy`. **host** `test_dummy_state_in_data`
+- Page reads `dummy` as true, false or not reported; button has id `dummy-toggle`, toggles `.on` from it; CSS fills `.on` with `--ok`. **host** `roast.test.js`, `web_check.test.js`
+
+Bench run:
+
+1. Board with `CPID_DUMMY_DATA 0`, page open on Controls: Fake readings is
+   not green; Monitoring > Telemetry shows "Fake readings: no".
+2. Fake readings, confirm: within about a second the button turns green and
+   BT/ET show 86 to 104 °F. Reload the page: green again after the first
+   reading.
+3. Restart the board from Maintenance: while disconnected the button is not
+   green; after the reconnect it stays off (dummy mode starts from
+   `CPID_DUMMY_DATA` at boot).
+4. Send `{"command":"dummyToggle"}` from Artisan or serial: the page follows
+   within about a second.
+
 ## Autotune required (D24)
 - `CPID_REQUIRE_AUTOTUNE 1`, erased flash (`pio run -t erase`, then upload) → `getControl` `tuned` false; `{"command":{"mode":"pid"}}` → mode stays Manual, `autotune` "autotune required", OLED "Autotune first" for 10 s. **host** (gate and text, `test_autotune_required_gate`); bench todo
 - Same board, profile loaded, `startProfile` → refused the same way; profile still loaded. **host** (gate); bench todo

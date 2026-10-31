@@ -36,7 +36,7 @@
     DET: 'ET rate of rise', cBT: 'BT correction', cET: 'ET correction', temp: 'Unit', interval: 'Broadcast interval (s)',
     timer: 'Uptime (s)', BurnerVal: 'Heater (%)', FanVal: 'Fan (%)', FanAssist: 'Fan assist (%)', SV: 'Setpoint', Mode: 'Mode', trip: 'Trip',
     Amb: 'Cold junction', Target: 'PID input', autotune: 'Autotune', pidKp: 'PID Kp', pidKi: 'PID Ki',
-    pidKd: 'PID Kd', wifiStrength: 'WiFi RSSI (dBm)', loopStackFree: 'Loop stack free (bytes)',
+    pidKd: 'PID Kd', wifiStrength: 'WiFi RSSI (dBm)', dummy: 'Fake readings', loopStackFree: 'Loop stack free (bytes)',
     mode: 'Mode', pidInput: 'PID input', setpoint: 'Setpoint', burner: 'Heater (%)', fan: 'Fan (%)',
     'cooldownFan.stop': 'Cooldown fan after stop (%)', 'cooldownFan.trip': 'Cooldown fan after trip (%)',
     'watchdog.enabled': 'Comms watchdog', 'watchdog.timeout': 'Watchdog timeout (s)', 'pid.kp': 'PID Kp',
@@ -52,6 +52,7 @@
     link: 'connecting',
     name: '',
     data: null, dataAt: 0,
+    dummy: null, // fake readings state from the last data reply on this connection (null: not reported)
     control: null, controlAt: 0,
     device: null, deviceAt: 0,
     stats: null, // connection figures from the worker (Monitoring > Connection)
@@ -154,6 +155,7 @@
     if (m.type === 'status') {
       const opened = m.state === 'open' && S.link !== 'open';
       S.link = m.state;
+      if (m.state !== 'open' || opened) S.dummy = null; // wait for the board's next data reply
       S.dirty = true;
       if (opened) { requestLibrary(); S.recipeSeq = null; if (S.info.controls) askAutotune(); }
     } else if (m.type === 'stats') {
@@ -173,6 +175,7 @@
     if (msg.data && typeof msg.data === 'object') {
       if (msg.name) S.name = msg.name;
       S.data = msg.data;
+      S.dummy = R.dummyState(msg.data);
       S.dataAt = at;
       watchUptime(msg.data.timer);
       watchStatus(msg.data);
@@ -417,6 +420,11 @@
     end.hidden = S.info.controls;
     end.disabled = !recording();
     end.title = recording() ? 'Stop recording; the board is not changed' : 'Available while a roast is recording';
+    const dummy = $('#dummy-toggle');
+    const fake = S.link === 'open' && S.dummy === true;
+    dummy.classList.toggle('on', fake);
+    dummy.setAttribute('aria-pressed', String(fake));
+    dummy.title = fake ? 'Fake readings are on: charts and Artisan show fake values' : '';
     $('#t-trip').textContent = d.trip ? 'TRIP ' + d.trip : (d.Target ? 'input ' + d.Target : '');
     $('.tile.mode').classList.toggle('tripped', !!d.trip);
     for (const e of $$('[data-field]')) {

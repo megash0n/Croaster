@@ -114,8 +114,11 @@ member (D8).
 ### Data going out
 Every second Artisan sends `{"command":"getArtisanData","id":N}`. Croaster
 answers with its data (`BT`, `ET`, RoR) plus our fields from the snapshot: `BurnerVal`, `FanVal`,
-`SV`, `Mode`, `trip`, `autotune`, `Target`, `pidKp/Ki/Kd`, `Amb`, `wifiStrength`. Croaster
-also broadcasts the same data to the ICRM app.
+`SV`, `Mode`, `trip`, `autotune`, `Target`, `pidKp/Ki/Kd`, `Amb`, `wifiStrength`, `dummy`. Croaster
+also broadcasts the same data to the ICRM app. `dummy` is Croaster's own
+`CroasterCore::useDummyData`, read through `dummyDataEnabled()` (D33); the page turns its Fake
+readings button green from it, with no extra poll. It is reset when the link
+drops, so the button shows off until the first data reply after a reconnect.
 
 ### Two probes, end to end
 ET and BT are two MAX31855 boards on one SPI bus: shared SCK (GPIO 12) and

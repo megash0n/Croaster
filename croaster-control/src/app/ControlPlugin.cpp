@@ -54,6 +54,8 @@ void ControlPlugin::attach(CroasterApp& app, const ControlSettings& settings) {
         controlproto::writeDataFields(controller_.snapshot(), unit(), data);
         if (WiFi.status() == WL_CONNECTED)
             data["wifiStrength"] = WiFi.RSSI();
+        // Fake readings state for the page's button (Croaster's useDummyData).
+        data["dummy"] = app_->core().dummyDataEnabled();
         if (dataWriter_)
             dataWriter_(data);
     });

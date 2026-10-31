@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Fake readings button shows its state (D33, T65).** Croaster PID data
+  gains `dummy` (Croaster's `useDummyData`, through a one-line
+  read-only getter added to `CroasterCore`); the page's Maintenance > Fake
+  readings button is green while it is true, after a reload and a reconnect
+  too, with no extra poll.
 - **User guide** (`docs/user-guide.md`): operating Croaster PID on the
   Behmor 2000AB: modes, the web page and roast flow, autotune and the fan
   test, fan assist, recipes, ramp shapes with a worked example, safety trips,

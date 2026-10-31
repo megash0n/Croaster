@@ -203,3 +203,12 @@ test('autotune starts only from the start dialog, and results change only from S
   assert.deepEqual(calls, ['apply', 'discard', 'discard']);
   assert.match(html, /<button value="save" autofocus>Save<\/button>/);
 });
+
+test('Fake readings button turns green from the data flag', () => {
+  assert.match(html, /<button[^>]*id="dummy-toggle"[^>]*data-cmd='\{"command":"dummyToggle"\}'/);
+  const app = read('app.js');
+  assert.match(app, /S\.dummy = R\.dummyState\(msg\.data\)/);
+  assert.match(app, /\$\('#dummy-toggle'\)/);
+  assert.match(app, /classList\.toggle\('on', fake\)/);
+  assert.match(read('app.css'), /\.row-buttons button\.on \{[^}]*background: var\(--ok\)/);
+});

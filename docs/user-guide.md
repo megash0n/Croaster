@@ -502,7 +502,12 @@ internally, whatever unit is shown.
 
 Maintenance > Fake readings (dummy mode) follows the unit: about 86 to
 104 °F, or 30 to 40 °C. Fake readings feed the page and connected apps only;
-the PID, autotune and safety checks always read the real probes.
+the PID, autotune and safety checks always read the real probes. The
+Fake readings button is green while fake readings are on, so a page left
+in dummy mode is easy to spot. It reads the board's state from the data it
+sends every second: it is correct after a page reload and turns green or
+back within about a second of a switch or a reconnect. While the page is
+not connected the button shows off.
 
 ## See also
 

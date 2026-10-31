@@ -221,6 +221,13 @@
     return lines.join('\n') + '\n';
   }
 
+  // Fake readings state from a data payload: true or false when the board reports
+  // "dummy", null when it does not (Croaster Monitor, older firmware, no data yet).
+  function dummyState(data) {
+    return data && typeof data.dummy === 'boolean' ? data.dummy : null;
+  }
+
   return { EVENTS, lsSlope, smoothedRor, detectTurningPoint, formatClock, phase, niceTicks, convertTemp,
-    convertSession, buildCsv, isRecording, endSession, resumeSession, sessionState, stopConfirmed, eventAllowed };
+    convertSession, buildCsv, isRecording, endSession, resumeSession, sessionState, stopConfirmed, eventAllowed,
+    dummyState };
 });
