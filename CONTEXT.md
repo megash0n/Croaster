@@ -291,6 +291,8 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `esp32s3-pid`). `MBEDTLS_SSL_IN/OUT_CONTENT_LEN` need
   `MBEDTLS_ASYMMETRIC_CONTENT_LEN=y` to take effect.
 - `.clang-format` is LLVM-based with attached braces; AGENTS.md says Allman.
+- Agent rules: root `AGENTS.md` (doc updates per change, checks before a
+  commit), plus `croaster-control/AGENTS.md` and `croaster-webui/AGENTS.md`.
   Sources follow `.clang-format`.
 - `.gitattributes`: `* text=auto eol=lf`, LF forced for sources, scripts,
   web assets, config and docs, CRLF for `.bat`/`.cmd`/`.ps1`, images and

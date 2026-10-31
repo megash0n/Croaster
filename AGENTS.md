@@ -34,7 +34,14 @@ describes.
   `ControlPlugin`). Used by `boards/esp32s3-pid` (Croaster PID) and
   `boards/esp32s3-monitor` (Croaster monitor, probe path only) via
   `CroasterControl=symlink://../../croaster-control`. Board config never goes
-  here either.
+  here either. Rules: `croaster-control/AGENTS.md`.
+- `croaster-webui/` — the browser page served by the S3 boards (`web/`
+  sources, gzipped into `src/webui_assets.h`). Rules: `croaster-webui/AGENTS.md`.
+- `boards/esp32s3-pid` (Croaster PID: heater, fan, PID, recipes, autotune)
+  and `boards/esp32s3-monitor` (probes and page, no outputs). Host tests for
+  `croaster-control/src/core` live in `boards/esp32s3-pid/test/`.
+- `docs/` — `design.md` (decisions D1…), `tickets.md` (T1…), `test-plan.md`,
+  `how.md`, `autotune/`.
 - `tools/` — build helpers shared by boards (`force_include_deps.py`: makes the
   force-included `config.h` a rebuild dependency).
 - `builds/` — gitignored; firmware output of `build_all.sh`.
@@ -74,6 +81,31 @@ describes.
   `boards/common`, `boards/esp32s3`, `boards/esp32c3`, `boards/esp8266`, and
   his macros such as `CROASTER_HAS_BLE`. Our `config.h` sets them from our
   macros (`#define CROASTER_HAS_BLE CMON_ENABLE_BLE`).
+
+## Changes on `rework/roaster`
+- Each change lands with its docs in the same commit: `CONTEXT.md`,
+  `CHANGELOG.md`, a decision in `docs/design.md` (next free D number, listed
+  in the "open for Shawn" table), a ticket in `docs/tickets.md` (next free T
+  number; fetch first, numbers are shared), `docs/test-plan.md` (host checks
+  and bench steps), and `docs/how.md` or `docs/autotune/` when they describe
+  the code touched.
+- New public names (types, functions, JSON keys, config macros, page ids) are
+  listed in the decision as pending Shawn's confirmation.
+- Fast-forward pushes only, to `rework/roaster`; `main` is left alone.
+- Docs and comments: professional, concise, about the code and the roasting
+  behaviour it controls (BT, rate of rise, charge, first crack). Name no
+  commercial roasting products and no outside code beyond the upstream
+  Croaster project and the libraries in `platformio.ini`.
+- Local changes inside `croaster/` stay minimal, are marked in a comment, and
+  are recorded in a ticket as "could be offered upstream".
+
+## Checks before a commit
+- Host: `cd boards/esp32s3-pid && pio test -e native` (all pass).
+- Page: `node --test croaster-webui/test/*.test.js` and, in `croaster-webui/`,
+  `python3 embed_assets.py --check` and `python3 test/test_embed_assets.py`.
+- Firmware: `pio run -e esp32s3-pid` and `pio run` in
+  `boards/esp32s3-monitor`, with no warnings beyond the WiFiManager ones
+  already there; note RAM, flash and page size changes in the decision.
 
 ## Before you finish a session
 - Working tree clean (or leftovers explicitly noted in CONTEXT.md → Next steps).
