@@ -255,6 +255,28 @@ Bench run (after a saved autotune with the fan test):
 6. Curve editor on the phone: drag points, presets, Use curve, Save; the
    profile reloads with the same curve.
 
+## Setpoint ramps start at BT (D32, T64)
+- Ramp after Manual steps with the setpoint at 0 starts at BT, sends PID first and `SetSetpoint` with `b = 1`; later points carry `b = 0` and follow F(t/T) over BT → target. **host** `test_setpoint_ramp_from_manual`, `test_shaped_setpoint_ramp`, `test_recipe_setpoint_ramp_and_mixing`
+- BT at or above the target → the target at once, no ramp, still followed. **host** `test_setpoint_ramp_bt_above_target`
+- Unreadable PID input → current setpoint when below the target, else the target; ET and MAX inputs pick that probe. **host** `test_setpoint_ramp_start_fallbacks`
+- `Pid::reset` at setpoint = input keeps the present output. **host** `test_pid_restart_keeps_output`
+- Drum, Manual 60 % to 150 °C, then `front` to 200 °C over 5 min: lowest RoR 10.5 °C/min against 16.5 before; from setpoint 0 BT falls at 32.5 °C/min. **host** `test_ramp_from_manual_on_drum`
+- Page start estimate: BT trigger, else previous setpoint target, not `chargeTemp`; skipped at or above the target. **host** `ramp.test.js`
+
+Bench run (after a saved autotune):
+
+1. Recipe: Charge step heater 100 %, fan 30 %; step at BT 300 °F: setpoint
+   400 °F over 6:00, `front`. No setpoint step before it.
+2. Start, Charge. Before BT reaches 300 °F, Controls shows the old
+   setpoint (or 0).
+3. At BT 300 °F: Live shows "Setpoint ramp 300 °F → 400 °F" (the start
+   within a degree or two of BT), mode PID, the heater stays near its
+   Manual % for the first seconds instead of dropping to 0, and BT RoR does
+   not dip. Note the RoR 30 s before and after.
+4. Edit the step to BT 300 °F, setpoint 290 °F over 2:00: at the step SV
+   goes to 290 °F at once, no ramp line, the heater falls as the PID holds
+   290 °F.
+
 ## Autotune required (D24)
 - `CPID_REQUIRE_AUTOTUNE 1`, erased flash (`pio run -t erase`, then upload) → `getControl` `tuned` false; `{"command":{"mode":"pid"}}` → mode stays Manual, `autotune` "autotune required", OLED "Autotune first" for 10 s. **host** (gate and text, `test_autotune_required_gate`); bench todo
 - Same board, profile loaded, `startProfile` → refused the same way; profile still loaded. **host** (gate); bench todo

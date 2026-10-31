@@ -19,7 +19,7 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 | `boards/esp32s3-monitor/` | Croaster monitor (same S3 N16R8 hardware, D26): 2× MAX31855 or MAX6675 + OLED, no heater, fan or control task; `src/config.h` (`CMON_` only) + `ConfigCheck.h` |
 | `croaster-control/` | Control add-on lib `CroasterControl` (D1). `src/core/`: pure logic (PID, multi-point autotune `autotune_sequence` + `autotune_protocol` and the older single-point relay, profiles, profile library format, recipe runner, MAX31855/MAX6675 decode, command protocol, safety rules), host tests in `boards/esp32s3-pid/test` (`pio test -e native`). `src/hw/`: ESP32 drivers (thermocouple SPI, SSR, dimmer/PWM fan) and `esp32s3_opi_pins.h` (ESP32-S3 octal-PSRAM pin rules both boards' `ConfigCheck.h` use). `src/app/`: control task, NVS settings, `ControlPlugin` (hooks into `CroasterApp`), `LibraryPlugin` + `library_storage` (profile library on LittleFS), `RecipePlugin` (recipe commands and tick), `AutotunePlugin` (`getAutotune`, apply/discard), `RoasterProbe` (Croaster PID) and `MonitorProbes` (Croaster monitor). `build_filter.py` limits native builds to `src/core` |
 | `croaster-webui/` | Browser UI lib `CroasterWebUi` (D27): `web/` page sources (`theme.js` colour schemes, T50), `embed_assets.py` (library extra script, gzips `web/` into the committed `src/webui_assets.h`), `src/WebUiServer` (ESP-IDF `esp_http_server` on `CMON_WEBUI_PORT`), host tests in `test/` (node + python) |
-| `docs/` | `user-guide.md` (operator guide for Croaster PID on the Behmor: modes, page, autotune, recipes, ramp shapes, trips), `design.md` (architecture + decisions D1–D31), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules, fan test), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source) |
+| `docs/` | `user-guide.md` (operator guide for Croaster PID on the Behmor: modes, page, autotune, recipes, ramp shapes, trips), `design.md` (architecture + decisions D1–D32), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules, fan test), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source) |
 | `tools/` | Build helpers: `force_include_deps.py` (pre: extra script; force-included `config.h` as a rebuild dependency, T47) |
 | `builds/` | gitignored firmware output of `./build_all.sh` |
 
@@ -84,6 +84,9 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   21-point curve is the rate of climb and its normalised area F(u) the
   progress (`recipe::rampFraction`), shared with the page in `web/ramp.js`.
   One ramp runs at a time (`Runner::Ramp`); `fan` does not ramp.
+  A setpoint ramp starts at the PID input when the step applies (D32,
+  `rampStartC`), with a bumpless PID restart (`SetSetpoint` `b = 1`); BT at
+  or above the target sends the target without a ramp.
   `chargeTemp` sets a PID preheat on Start that is not a followed step. The
   page checks ramps against the saved model's `maxRorCpm` (port in
   `ramp.js`); keep the two in step.
@@ -241,7 +244,8 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 - Dummy mode (`CMON_DUMMY_DATA`) only fakes Croaster's `tempBt`/`tempEt`
   (display unit, T61). On Croaster PID the control task still reads the real
   probes, so PID, autotune and safety see NaN without probes; only the
-  recipe runner (`RecipePlugin::inputs()`) reads the core values.
+  recipe runner (`RecipePlugin::inputs()`) reads the core values, so in
+  dummy mode a setpoint ramp starts at the fake BT.
 - WebSockets 2.7.3 raises `DISCONNECTED` for every closed slot, including
   connections that never upgraded; count clients with `connectedClients()`,
   not ++/-- per event (T60). The ICRM app needs the periodic broadcast

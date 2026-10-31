@@ -567,7 +567,27 @@ void Runner::record(uint8_t i, float atS, Outcome o) {
     seq_++;
 }
 
-void Runner::startRamp(const Action& a, float from, uint32_t nowMs, Output& out) {
+float pidInputC(const Inputs& in) {
+    switch (in.pidInput) {
+    case PidInput::ET:
+        return in.etC;
+    case PidInput::MAX:
+        return std::isfinite(in.btC) && std::isfinite(in.etC) ? fmaxf(in.btC, in.etC) : NAN;
+    case PidInput::BT:
+    default:
+        return in.btC;
+    }
+}
+
+float rampStartC(const Inputs& in, float targetC) {
+    const float pv = pidInputC(in);
+    if (std::isfinite(pv))
+        return pv < targetC ? pv : NAN;
+    const float sp = in.setpointC;
+    return std::isfinite(sp) && sp > 0 && sp < targetC ? sp : NAN;
+}
+
+void Runner::startRamp(const Action& a, float from, uint32_t nowMs, Output& out, float restart) {
     rampActive_ = true;
     rampPower_ = a.type == ActionType::Power;
     rampRates_ = recipe_.rates(a);
@@ -575,7 +595,7 @@ void Runner::startRamp(const Action& a, float from, uint32_t nowMs, Output& out)
     rampToC_ = a.value;
     rampS_ = a.rampS;
     rampStartMs_ = rampSentMs_ = nowMs;
-    out.add(rampPower_ ? Command::Kind::SetHeater : Command::Kind::SetSetpoint, from);
+    out.add(rampPower_ ? Command::Kind::SetHeater : Command::Kind::SetSetpoint, from, restart);
 }
 
 Runner::Ramp Runner::ramp(uint32_t nowMs) const {
@@ -611,8 +631,10 @@ void Runner::apply(const Step& s, const Inputs& in, Output& out) {
             out.add(Command::Kind::SetMode, static_cast<float>(Mode::Pid));
             followSetpoint_ = true;
             rampActive_ = false;
-            if (a.rampS > 0)
-                startRamp(a, in.setpointC, in.nowMs, out);
+            if (a.rampS > 0 && std::isfinite(rampStartC(in, a.value)))
+                // b = 1: the controller restarts the PID bumpless at the new
+                // setpoint, so the heater carries on from its present output.
+                startRamp(a, rampStartC(in, a.value), in.nowMs, out, 1);
             else
                 out.add(Command::Kind::SetSetpoint, a.value);
             break;

@@ -19,9 +19,12 @@
 //   power v     Manual mode, heater v %             fan v        fan v %
 //   setpoint v  PID mode, target v
 //   hold        stop a ramp and keep the outputs as they are
-//   power and setpoint take "ramp": s (0..3600) to move there from the current
-//   value instead of at once, and "shape" for how the rate of climb is spread
-//   over the ramp: "linear" (default, constant), "normal" (slow, fast, slow),
+//   power and setpoint take "ramp": s (0..3600) to move there gradually
+//   instead of at once. A power ramp starts from the current heater %. A
+//   setpoint ramp starts from the PID input (BT by default) when the step
+//   applies, whatever mode or setpoint came before (rampStartC below).
+//   "shape" sets how the rate of climb is spread over the ramp: "linear"
+//   (default, constant), "normal" (slow, fast, slow),
 //   "front" (fast first, easing into the target), "back" (slow first) or
 //   "custom" with "curve": 21 rates 0..100 at 0, 5, ... 100 % of the ramp time.
 //   The value at time t is start + (target - start) * F(t / ramp), F the
@@ -165,9 +168,23 @@ struct Inputs {
     uint32_t nowMs = 0;
     float btC = NAN, etC = NAN, rorC = NAN; // NaN = no reading
     SafetyTrip trip = SafetyTrip::None;
-    float setpointC = 0; // current controller setpoint (setpoint ramp start)
+    float setpointC = 0; // current controller setpoint (fallback setpoint ramp start)
     float heaterPct = 0; // current heater output (power ramp start)
+    PidInput pidInput = PidInput::BT; // the probe the PID controls (setpoint ramp start)
 };
+
+// The PID input in `in` (BT, ET or the higher of the two); NaN when unreadable.
+float pidInputC(const Inputs& in);
+
+// Where a setpoint ramp to `targetC` starts. Normally the PID input, so the
+// shape spreads the whole climb from where the beans are to the target. NaN
+// when there is nothing to ramp: the input is already at or above the target
+// (the step holds the target instead; ramps never go down), or the input is
+// unreadable and the current setpoint is no usable start either (0, not
+// finite, or at or above the target). With an unreadable input the current
+// setpoint is used when it lies below the target; the controller's sensor
+// trip ends PID within 2 s in that case anyway.
+float rampStartC(const Inputs& in, float targetC);
 
 enum class State : uint8_t { Empty, Ready, Running, Done, Aborted };
 const char* stateName(State s);
@@ -187,10 +204,11 @@ struct Output {
     Command commands[kMax];
     size_t count = 0;
     bool stop = false; // run the stop path (cool action)
-    void add(Command::Kind k, float a = 0) {
+    void add(Command::Kind k, float a = 0, float b = 0) {
         if (count < kMax) {
             Command c{k};
             c.a = a;
+            c.b = b;
             commands[count++] = c;
         }
     }
@@ -270,7 +288,7 @@ private:
     size_t firedCount_ = 0;
     uint32_t seq_ = 0; // increments on every fired step and state change
     int prompt_ = -1;
-    void startRamp(const Action& a, float from, uint32_t nowMs, Output& out);
+    void startRamp(const Action& a, float from, uint32_t nowMs, Output& out, float restart = 0);
     bool rampActive_ = false;
     bool rampPower_ = false;
     bool pendingCharge_ = false;

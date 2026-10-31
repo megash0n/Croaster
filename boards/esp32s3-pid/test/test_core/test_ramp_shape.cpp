@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "core/pid.h"
 #include "core/recipe.h"
 
 namespace {
@@ -28,6 +29,22 @@ float last(const recipe::Output& o, Command::Kind k) {
         if (o.commands[i].kind == k)
             v = o.commands[i].a;
     return v;
+}
+// The last command of kind `k`; kind Stop with a = NaN when none.
+Command lastCommand(const recipe::Output& o, Command::Kind k) {
+    Command c{Command::Kind::Stop};
+    c.a = NAN;
+    for (size_t i = 0; i < o.count; i++)
+        if (o.commands[i].kind == k)
+            c = o.commands[i];
+    return c;
+}
+recipe::Runner& started(recipe::Runner& run, const char* text) {
+    static recipe::Recipe r;
+    TEST_ASSERT_EQUAL_STRING("", parse(text, r));
+    run.load(r);
+    run.start();
+    return run;
 }
 } // namespace
 
@@ -120,16 +137,18 @@ void test_shaped_setpoint_ramp() {
     run.start();
     recipe::Output o;
     run.tick(at(0, 90), clock, o);
-    run.tick(at(1000, 110), clock, o);
-    TEST_ASSERT_EQUAL_FLOAT(150, last(o, Command::Kind::SetSetpoint));
+    run.tick(at(1000, 110), clock, o); // from BT 110, not the old setpoint 150
+    TEST_ASSERT_EQUAL_FLOAT(110, last(o, Command::Kind::SetSetpoint));
     o = recipe::Output();
-    run.tick(at(6000, 150), clock, o); // half the time, three quarters of the climb
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 225, last(o, Command::Kind::SetSetpoint));
+    // Half the time, three quarters of the 110 -> 250 climb: the shape spans
+    // the whole BT-to-target change.
+    run.tick(at(6000, 150), clock, o);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 110 + 140 * 0.75f, last(o, Command::Kind::SetSetpoint));
 
     JsonDocument d;
     recipe::writeStatus(d.to<JsonObject>(), run, clock, 6000, "x", 'C');
     TEST_ASSERT_EQUAL_STRING("setpoint", d["ramp"]["kind"]);
-    TEST_ASSERT_EQUAL_FLOAT(150, d["ramp"]["from"].as<float>());
+    TEST_ASSERT_EQUAL_FLOAT(110, d["ramp"]["from"].as<float>());
     TEST_ASSERT_EQUAL_FLOAT(250, d["ramp"]["to"].as<float>());
     TEST_ASSERT_EQUAL_FLOAT(10, d["ramp"]["duration"].as<float>());
     TEST_ASSERT_EQUAL_FLOAT(5, d["ramp"]["elapsed"].as<float>());
@@ -205,10 +224,118 @@ void test_charge_temp_preheat() {
     TEST_ASSERT_TRUE(std::isnan(last(o, Command::Kind::SetSetpoint)));
 }
 
+// After Manual power steps the controller setpoint is stale (0 here). The
+// ramp starts at BT and asks for a bumpless PID restart (b = 1) after the
+// switch to PID.
+void test_setpoint_ramp_from_manual() {
+    recipe::Runner run;
+    recipe::RoastClock clock;
+    started(run, R"({"steps":[
+        {"trigger":{"type":"bt","value":60},"actions":[{"type":"power","value":100},{"type":"fan","value":30}]},
+        {"trigger":{"type":"bt","value":150},"actions":[{"type":"setpoint","value":200,"ramp":360,"shape":"front"}]}]})");
+    recipe::Output o;
+    recipe::Inputs in = at(0, 50);
+    in.setpointC = 0;
+    run.tick(in, clock, o);
+    in = at(1000, 70, 100);
+    in.setpointC = 0;
+    run.tick(in, clock, o);
+    TEST_ASSERT_EQUAL_FLOAT(100, last(o, Command::Kind::SetHeater));
+    o = recipe::Output();
+    in = at(2000, 151, 100);
+    in.setpointC = 0;
+    run.tick(in, clock, o);
+    TEST_ASSERT_TRUE(o.commands[0].kind == Command::Kind::SetMode &&
+                     o.commands[0].a == static_cast<float>(Mode::Pid));
+    const Command c = lastCommand(o, Command::Kind::SetSetpoint);
+    TEST_ASSERT_EQUAL_FLOAT(151, c.a);
+    TEST_ASSERT_EQUAL_FLOAT(1, c.b);
+    TEST_ASSERT_TRUE(run.ramping());
+    o = recipe::Output();
+    in = at(2000 + 180000, 180, 100); // half the time: three quarters of 151 -> 200
+    run.tick(in, clock, o);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 151 + 49 * 0.75f, last(o, Command::Kind::SetSetpoint));
+    TEST_ASSERT_EQUAL_FLOAT(0, lastCommand(o, Command::Kind::SetSetpoint).b); // only the start restarts
+}
+
+// BT already at or above the target: no ramp (ramps never go down), the step
+// holds the target as a plain setpoint step would.
+void test_setpoint_ramp_bt_above_target() {
+    recipe::Runner run;
+    recipe::RoastClock clock;
+    started(run, R"({"steps":[
+        {"trigger":{"type":"bt","value":150},"actions":[{"type":"setpoint","value":200,"ramp":60,"shape":"front"}]}]})");
+    recipe::Output o;
+    run.tick(at(0, 140), clock, o);
+    run.tick(at(1000, 205), clock, o);
+    const Command c = lastCommand(o, Command::Kind::SetSetpoint);
+    TEST_ASSERT_EQUAL_FLOAT(200, c.a);
+    TEST_ASSERT_EQUAL_FLOAT(0, c.b);
+    TEST_ASSERT_FALSE(run.ramping());
+    TEST_ASSERT_TRUE(run.followingSetpoint());
+    TEST_ASSERT_TRUE(std::isnan(recipe::rampStartC(at(0, 200), 200))); // equal: nothing to climb
+}
+
+// No PID input reading: start at the current setpoint when it is below the
+// target, else go straight to the target. ET or MAX as the PID input pick
+// that probe.
+void test_setpoint_ramp_start_fallbacks() {
+    recipe::Inputs in = at(0, NAN);
+    in.setpointC = 150;
+    TEST_ASSERT_EQUAL_FLOAT(150, recipe::rampStartC(in, 200));
+    in.setpointC = 0;
+    TEST_ASSERT_TRUE(std::isnan(recipe::rampStartC(in, 200)));
+    in.setpointC = 210;
+    TEST_ASSERT_TRUE(std::isnan(recipe::rampStartC(in, 200)));
+    in.setpointC = NAN;
+    TEST_ASSERT_TRUE(std::isnan(recipe::rampStartC(in, 200)));
+    in = at(0, 120);
+    in.etC = 180;
+    in.pidInput = PidInput::ET;
+    TEST_ASSERT_EQUAL_FLOAT(180, recipe::rampStartC(in, 200));
+    in.pidInput = PidInput::MAX;
+    TEST_ASSERT_EQUAL_FLOAT(180, recipe::rampStartC(in, 200));
+    in.etC = NAN; // MAX needs both probes
+    in.setpointC = 160;
+    TEST_ASSERT_EQUAL_FLOAT(160, recipe::rampStartC(in, 200));
+
+    // In a running recipe: BT unreadable, setpoint 0, time trigger. The step
+    // sends the target at once and does not ramp.
+    recipe::Runner run;
+    recipe::RoastClock clock;
+    started(run, R"({"steps":[
+        {"trigger":{"type":"time","value":10},"actions":[{"type":"setpoint","value":200,"ramp":60}]}]})");
+    clock.mark(recipe::Event::Charge, 0);
+    recipe::Output o;
+    in = at(5000, NAN);
+    in.setpointC = 0;
+    run.tick(in, clock, o);
+    in.nowMs = 11000;
+    run.tick(in, clock, o);
+    TEST_ASSERT_EQUAL_FLOAT(200, last(o, Command::Kind::SetSetpoint));
+    TEST_ASSERT_FALSE(run.ramping());
+}
+
+// What the controller does with b = 1: Pid::reset at setpoint = input keeps
+// the present output, so the switch from Manual 100 % does not drop the heater.
+void test_pid_restart_keeps_output() {
+    Pid::Config pc;
+    Pid pid(pc);
+    pid.setGains(PidGains{4, 0.05f, 20});
+    pid.reset(151, 151, 100, 12);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 100, pid.update(151, 151, 12));
+    pid.reset(151, 151, 70, 12);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 70, pid.update(151.2f, 151, 12)); // only Kp * 0.2 C added
+}
+
 void runRampShapeTests() {
     RUN_TEST(test_shape_fraction);
     RUN_TEST(test_shape_parse);
     RUN_TEST(test_shaped_setpoint_ramp);
     RUN_TEST(test_power_ramp_and_hold);
     RUN_TEST(test_charge_temp_preheat);
+    RUN_TEST(test_setpoint_ramp_from_manual);
+    RUN_TEST(test_setpoint_ramp_bt_above_target);
+    RUN_TEST(test_setpoint_ramp_start_fallbacks);
+    RUN_TEST(test_pid_restart_keeps_output);
 }

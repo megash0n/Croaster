@@ -918,6 +918,97 @@ void test_shaped_ramps_on_drum() {
     }
 }
 
+// A front ramp to 200 C started from Manual 60 % when BT passes 150 C, with
+// the controller setpoint stale at 0 (power steps before it). The ramp starts
+// at BT and the PID restarts from 60 %, so BT keeps rising. The
+// old start (from the stale setpoint) would have held the heater near 0 until
+// the setpoint caught up with BT.
+void test_ramp_from_manual_on_drum() {
+    const Report& r = fanReport();
+    const roastermodel::RoasterModel m = roastermodel::fromReport(r, 60);
+    JsonDocument d;
+    deserializeJson(d, R"({"steps":[{"trigger":{"type":"bt","value":150},"actions":[{"type":"setpoint","value":200,"ramp":300,"shape":"front"}]}]})");
+    static recipe::Recipe rec;
+    TEST_ASSERT_EQUAL_STRING("", recipe::parse(d.as<JsonObjectConst>(), 'C', rec));
+    float rorBefore[2] = {}, rorMin[2] = {}, over[2] = {}, startAt[2] = {};
+    for (int newStart = 0; newStart < 2; newStart++) {
+        recipe::Runner run;
+        recipe::RoastClock clock;
+        run.load(rec);
+        run.start();
+        Drum q;
+        q.fan = 60;
+        Pid::Config pc;
+        Pid pid(pc);
+        pid.setGains(r.recommended);
+        roastermodel::SetpointSlope slope;
+        float pv = 25, sp = 0, heater = 60, t0 = NAN;
+        bool pidOn = false;
+        float hist[2400];
+        int n = 0;
+        rorMin[newStart] = 1e9f;
+        for (float tt = 0; tt < 1200 && n < 2400; tt += 0.5f) {
+            const uint32_t ms = static_cast<uint32_t>(tt * 1000);
+            recipe::Inputs in;
+            in.nowMs = ms;
+            in.btC = pv;
+            in.setpointC = sp;
+            in.heaterPct = heater;
+            recipe::Output o;
+            run.tick(in, clock, o);
+            for (size_t i = 0; i < o.count; i++) {
+                const Command& c = o.commands[i];
+                if (c.kind != Command::Kind::SetSetpoint)
+                    continue;
+                if (!pidOn) { // the ramp start: what the controller does
+                    pidOn = true;
+                    t0 = tt;
+                    startAt[newStart] = c.a;
+                    sp = newStart ? c.a : 0; // old: ramp from the stale setpoint 0
+                    const float ff = roastermodel::rampFeedforward(m, sp, 60, slope.value()) +
+                                     roastermodel::fanFeedforward(m, 60, sp);
+                    pid.reset(sp, pv, newStart ? heater : 0, ff); // old: PID from 0 %
+                } else if (newStart) {
+                    sp = c.a;
+                } else { // old path: the same shape over 0 -> 200
+                    const float u = fminf(1, (tt - t0) / 300);
+                    sp = 200 * recipe::rampFraction(recipe::shapeRates(recipe::Shape::Front), u);
+                }
+            }
+            for (int k = 0; k < 2; k++) { // control at 0.25 s, recipe at 0.5 s
+                if (pidOn)
+                    heater = pid.update(sp, pv, roastermodel::rampFeedforward(m, sp, 60, slope.update(sp, 0.25f)) +
+                                                    roastermodel::fanFeedforward(m, 60, sp));
+                pv = q.step(heater);
+            }
+            hist[n++] = pv;
+            const int w = 60; // 30 s window
+            if (n > w && std::isfinite(t0)) {
+                const float ror = (hist[n - 1] - hist[n - 1 - w]) * 2; // C/min
+                if (tt < t0 && tt > t0 - 1)
+                    rorBefore[newStart] = ror;
+                if (tt >= t0 + 30 && tt <= t0 + 120)
+                    rorMin[newStart] = fminf(rorMin[newStart], ror);
+                if (tt > t0 + 300)
+                    over[newStart] = fmaxf(over[newStart], pv - 200);
+            }
+            if (!std::isfinite(t0) && n > 60)
+                rorBefore[newStart] = (hist[n - 1] - hist[n - 61]) * 2;
+        }
+        TEST_ASSERT_TRUE(pidOn);
+    }
+    char msg[220];
+    snprintf(msg, sizeof msg,
+             "front 150->200 C from Manual 60 %%: RoR %.1f C/min before; lowest 30 s RoR in the first 2 min "
+             "%.1f C/min starting at BT (%.1f C), %.1f C/min from the stale setpoint; overshoot %.2f C",
+             rorBefore[1], rorMin[1], startAt[1], rorMin[0], over[1]);
+    TEST_MESSAGE(msg);
+    TEST_ASSERT_TRUE(startAt[1] >= 150 && startAt[1] < 152);
+    TEST_ASSERT_TRUE(rorMin[1] > 0.5f * rorBefore[1]); // momentum kept
+    TEST_ASSERT_TRUE(rorMin[0] < rorMin[1]);
+    TEST_ASSERT_TRUE(over[1] < 2.5f);
+}
+
 // Fan assist: bounded, rate-limited, never below the base fan, never in
 // Manual (stop, cooldown) or during a trip, and off unless enabled.
 void test_fan_assist_bounds() {
@@ -1175,6 +1266,7 @@ void runFanTests() {
     RUN_TEST(test_fan_feedforward_dip);
     RUN_TEST(test_ramp_feedforward_and_max_ror);
     RUN_TEST(test_shaped_ramps_on_drum);
+    RUN_TEST(test_ramp_from_manual_on_drum);
     RUN_TEST(test_fan_assist_bounds);
     RUN_TEST(test_pid_feedforward);
 }

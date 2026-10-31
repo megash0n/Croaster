@@ -180,7 +180,12 @@ void Controller::apply(const Command& c) {
         }
         // legacy Control::setSetpoint: going from 0 to a real setpoint clears the
         // PID history so it starts from zero output, not from stale state.
-        if (prev <= 0 && st_.setpoint > 0 && st_.mode == Mode::Pid)
+        // A recipe setpoint ramp (b = 1) starts at the PID input: restart from
+        // the present heater output so the move to PID or the new start does
+        // not kick the heater up or down.
+        if (c.b == 1 && st_.mode == Mode::Pid)
+            pid_.reset(st_.setpoint, pv, heater_.requested(), feedforward(st_.setpoint));
+        else if (prev <= 0 && st_.setpoint > 0 && st_.mode == Mode::Pid)
             pid_.reset(st_.setpoint, pv, 0, feedforward(st_.setpoint));
         break;
     }

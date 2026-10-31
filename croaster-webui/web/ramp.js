@@ -140,16 +140,26 @@
     return Math.max(0, (rise / h) * (m.heaterMax - h) / tau * 60);
   }
 
+  // Where the board starts a setpoint ramp: BT when the step fires
+  // (core/recipe.cpp rampStartC). The editor has no BT, so it estimates it:
+  // the step's BT trigger value, else the target of the setpoint action
+  // before it. NaN when there is no estimate.
+  function rampStartEstimate(trigger, prevTargetC, unit) {
+    const t = trigger || {};
+    if (t.type === 'bt' && isNum(t.value)) return toC(t.value, unit);
+    return isNum(prevTargetC) ? prevTargetC : NaN;
+  }
+
   // Setpoint ramps in a recipe (temperatures in `unit`) the saved model says
-  // the roaster cannot follow at their steepest part. Each ramp starts from the
-  // setpoint before it: the previous setpoint action, else "chargeTemp", else
-  // a BT trigger value. The fan is the last fan action before it (else the
-  // autotune run fan). Returns [{step, action, needC, maxC, atC, fan}] in C.
+  // the roaster cannot follow at their steepest part. Each ramp starts from
+  // rampStartEstimate; one that starts at or above its target does not ramp
+  // on the board and is not checked. The fan is the last fan action before it
+  // (else the autotune run fan). Returns [{step, action, needC, maxC, atC, fan}] in C.
   function checkRecipe(recipe, unit, saved, savedUnit) {
     const m = model(saved, savedUnit || unit);
     const out = [];
     if (!m || !recipe || !Array.isArray(recipe.steps)) return out;
-    let sp = isNum(recipe.chargeTemp) ? toC(recipe.chargeTemp, unit) : NaN;
+    let sp = NaN;
     let fan = m.runFan;
     recipe.steps.forEach((s, i) => {
       const t = s.trigger || {};
@@ -157,8 +167,7 @@
         if (a.type === 'fan' && isNum(a.value)) fan = a.value;
         if (a.type !== 'setpoint' || !isNum(a.value)) return;
         const to = toC(a.value, unit);
-        let from = sp;
-        if (!isNum(from) && t.type === 'bt' && isNum(t.value)) from = toC(t.value, unit);
+        const from = rampStartEstimate(t, sp, unit);
         sp = to;
         if (!isNum(a.ramp) || !(a.ramp > 0) || !isNum(from) || !(to > from)) return;
         const r = rates(a.shape, a.curve);
@@ -181,5 +190,5 @@
   }
 
   return { POINTS, STEP, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, rates, fraction, peak, path,
-    model, maxRorC, checkRecipe, checkText };
+    model, maxRorC, rampStartEstimate, checkRecipe, checkText };
 });

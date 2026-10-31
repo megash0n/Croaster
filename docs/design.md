@@ -323,6 +323,7 @@ New 2026-10-31, open for Shawn:
 |:---|:---|
 | D30 | Autotune fan test, fan and ramp feedforward, fan assist. |
 | D31 | Recipe ramp shapes (rate-of-climb curves), power ramps, charge temperature, ramp feasibility check. |
+| D32 | Setpoint ramps start at the PID input (BT) when the step applies, with a bumpless PID restart. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1382,7 +1383,7 @@ Decisions (Shawn approved 1 to 3 on 2026-10-29):
     Steps that are true in the same tick fire together, in order.
   - Actions: `power` (switches to Manual with that heater %), `fan`,
     `setpoint` (switches to PID; optional `ramp` seconds moves the target
-    from the current setpoint, linear or shaped, D31), `hold` (stops a ramp where it is),
+    from BT at the step, linear or shaped, D31, D32), `hold` (stops a ramp where it is),
     `cool` (the same as STOP: heater 0, cooldown fan, recipe ends), `end`
     (recipe ends, outputs stay), `note` (logged only).
   - **(1) The editor's default step is heater % plus fan % (open loop).**
@@ -1558,7 +1559,9 @@ approach first crack without a flick or a crash.
   factor, against the model's maximum rate of rise at that temperature and
   fan with the heater at the saved
   model's ceiling, and warns under the step. The start is the
-  previous setpoint step, else `chargeTemp`, else the step's BT trigger.
+  previous setpoint step, else `chargeTemp`, else the step's BT trigger
+  (replaced by D32: the step's BT trigger, else the previous setpoint
+  target).
 - **Live.** `getRecipe` adds `chargeTemp` and, while a ramp runs, `ramp`
   (`kind`, `from`, `to`, `duration`, `elapsed`, `rates`); Live draws the rest
   of a setpoint ramp as a dashed planned SV and shows the ramp line. The
@@ -1593,6 +1596,62 @@ approach first crack without a flick or a crash.
   `ramp.js` (`RampShape`), `#curve-dialog`, `.sv-plan`.
 - **To confirm:** the four presets, the 8-curve limit, preheat not counting
   as a followed step, power ramps allowed for every shape.
+
+### D32. Setpoint ramps start at BT — new 2026-10-31, open for Shawn
+Shawn approved: a setpoint ramp in a recipe must start from the current BT,
+not from the board's last setpoint. Before this, a ramp after Manual power
+steps started from a stale setpoint (0, an old Controls value or the charge
+temperature). From 0 the PID saw BT far above the plan and cut the heater
+until the plan caught up, so BT lost its momentum at the point of the roast
+where it matters most. The workaround was a plain setpoint step before the
+first ramp.
+
+- **Start rule** (`recipe::rampStartC`). When a `setpoint` step with `ramp`
+  applies, the ramp starts at the PID input the recipe sees (corrected BT
+  by default; ET or the higher of the two when `pidInput` says so), whatever
+  mode or setpoint came before. The shape is applied over the whole
+  BT-to-target change, `from + (target − from) · F(t/T)`, so `front` still
+  climbs hard first and eases into the target.
+- **BT at or above the target.** No ramp: the step sends the target as a
+  plain setpoint step would and the PID holds it. Ramps never go down.
+- **PID input unreadable.** The ramp starts at the current setpoint when it
+  is above 0 and below the target; otherwise the step sends the target at
+  once. Either way the controller's `sensor` trip ends PID within 2 s, since
+  PID cannot run without its input. Starting from the old setpoint keeps the
+  heater request no higher than the earlier behaviour.
+- **Bumpless start.** The ramp's first `SetSetpoint` carries `b = 1`; the
+  controller then calls `Pid::reset` at the new setpoint with the present
+  heater output and the feedforward, after the switch to PID. The heater
+  carries on from its Manual % (or the PID's present output) instead of the
+  old restart from 0 % when the setpoint went from 0 to a value. Plain
+  setpoint steps, the charge temperature and protocol `setpoint` commands
+  send `b = 0` and behave as before. The setpoint slope for ramp
+  feedforward treats the jump to BT as a step (over 2 °C) and ignores it.
+- **Chained ramps.** Each ramp restarts at BT, so a ramp that BT lagged
+  behind starts the next from where the beans are, not from the old plan.
+- **Power ramps** are unchanged: they start from the current heater %.
+- **Page.** The editor has no BT, so the feasibility check estimates the
+  start: the step's BT trigger value, else the previous setpoint step's
+  target (`RampShape.rampStartEstimate`); `chargeTemp` no longer counts. A
+  ramp whose estimate is at or above its target is not checked. The Live
+  dashed plan draws from `getRecipe` `ramp.from`, which is now BT at the
+  step, so page and board agree.
+- **Simulation** (drum model, fan 60 %, Manual 60 % until BT passes
+  150 °C (302 °F), then `front` to 200 °C (392 °F) over 5 min,
+  `test_ramp_from_manual_on_drum`): BT RoR 16.5 °C/min (29.7 °F/min) before
+  the step. Starting at BT with the bumpless restart, the lowest 30 s RoR in
+  the next 2 min is 10.5 °C/min (18.9 °F/min) and the overshoot 0.75 °C
+  (1.4 °F). The old start from setpoint 0 drives the heater to 0 and BT falls
+  at 32.5 °C/min (58.5 °F/min).
+- **Cost:** `esp32s3-pid` RAM 66 768 B (unchanged), flash 2 038 623 B
+  (+688); monitor flash 1 761 643 B (+144, page only); page 62 278 B
+  gzipped (+143).
+- **New names, pending Shawn's confirmation:** `recipe::rampStartC`,
+  `recipe::pidInputC`, `Inputs::pidInput`, `Command::SetSetpoint` `b = 1`
+  (bumpless restart), `Output::add` third argument, page
+  `RampShape.rampStartEstimate`.
+- **To confirm:** start at the PID input rather than BT when the PID input
+  is ET or MAX; the unreadable-input fallback; no downward ramps.
 
 ## Build platform and sdkconfig
 - Default: `platformio/espressif32 @ 8.0.0` (Arduino-ESP32 3.3.12, IDF 5.5).

@@ -1245,16 +1245,16 @@ void test_recipe_setpoint_ramp_and_mixing() {
     run.start();
     recipe::Output o;
     run.tick(at(0, 90), clock, o);
-    run.tick(at(1000, 110), clock, o); // ramp from 150 (current setpoint) to 250 over 10 s
+    run.tick(at(1000, 110), clock, o); // ramp from BT 110 to 250 over 10 s
     TEST_ASSERT_TRUE(o.commands[0].kind == Command::Kind::SetMode && o.commands[0].a == static_cast<float>(Mode::Pid));
-    TEST_ASSERT_TRUE(has(o, Command::Kind::SetSetpoint, 150));
+    TEST_ASSERT_TRUE(has(o, Command::Kind::SetSetpoint, 110));
     TEST_ASSERT_TRUE(run.followingSetpoint());
     TEST_ASSERT_TRUE(run.ramping());
     o = recipe::Output();
     run.tick(at(1200, 120), clock, o); // under 500 ms: nothing sent
     TEST_ASSERT_EQUAL(0, o.count);
     run.tick(at(6000, 150), clock, o); // half way
-    TEST_ASSERT_TRUE(has(o, Command::Kind::SetSetpoint, 200));
+    TEST_ASSERT_TRUE(has(o, Command::Kind::SetSetpoint, 180));
     o = recipe::Output();
     run.tick(at(20000, 190), clock, o); // ramp ends at the target
     TEST_ASSERT_TRUE(has(o, Command::Kind::SetSetpoint, 250));

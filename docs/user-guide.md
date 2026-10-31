@@ -362,11 +362,27 @@ The spark next to the Shape menu previews the path.
 
 ### Where a ramp starts
 
-A setpoint ramp starts from the board's current setpoint when the step
-fires, not from BT. After Manual power steps the setpoint is whatever was
-last set (the charge temperature, a Controls value, or 0). Put a setpoint
-step without a ramp before the first ramp so it has a known start, as in
-the example below. A power ramp starts from the current heater %.
+A setpoint ramp starts at BT when its step fires (at the PID input, if you
+changed that to ET or MAX), whatever mode or setpoint came before. The
+shape is spread over the whole climb from there to the target, so a front
+ramp still climbs hardest first. The PID takes over from the heater % it
+finds: after full power in Manual it carries on near full power instead of
+cutting the heater, so BT keeps its momentum.
+
+- If BT is already at or above the target, the step does not ramp. It sets
+  the target at once and the PID holds it. Ramps never go down.
+- If the PID input cannot be read at that moment, the ramp starts at the
+  current setpoint when that is below the target, or the step sets the
+  target at once. A sensor trip follows within 2 seconds in either case.
+- Each ramp starts at BT again, so if BT lagged a ramp, the next one starts
+  from where the beans are.
+
+A power ramp starts from the current heater %.
+
+The feasibility check below does not know BT ahead of time. It assumes a
+ramp starts at its step's BT trigger value, or else at the target of the
+setpoint step before it. Give a ramp step a BT trigger when you want the
+check to be exact.
 
 ### Feasibility warning
 
@@ -421,23 +437,21 @@ A Behmor roast, about half a pound, with a first crack near 390 °F
 - Charge at: blank (start cold, as a Behmor usually does).
 - Step 1. When: event Charge. Then: heater 100 %, fan 30 %. Full power
   through the turning point and drying, in Manual.
-- Step 2. When: event Turning point. Then: setpoint 300 °F (149 °C), no
-  ramp. BT is far below 300 °F here, so the PID keeps the heater near full;
-  this step gives the ramp a known start.
-- Step 3. When: BT at or above 290 °F (143 °C). Then: setpoint 400 °F
-  (204 °C) over 6:00, shape Front. Starting it a little before BT reaches
-  the 300 °F anchor keeps the PID from easing the heater off at the end of
-  drying. The climb starts at about 33 °F/min and eases toward first crack,
-  giving a declining RoR.
-- Step 4. When: event FC start. Then: heater 60 %, fan 50 % (for example).
+- Step 2. When: BT at or above 300 °F (149 °C). Then: setpoint 400 °F
+  (204 °C) over 6:00, shape Front. The ramp starts at BT, about 300 °F, and
+  the PID carries on from 100 %. The plan climbs at about 33 °F/min at
+  first and eases toward first crack, giving a declining RoR. If the plan
+  starts faster than the beans can follow, the heater simply stays at full
+  until BT meets it.
+- Step 3. When: event FC start. Then: heater 60 %, fan 50 % (for example).
   Fixed power and more airflow through development, in Manual: no helpers
   change these values.
-- Step 5. When: event Drop. Then: Cool.
+- Step 4. When: event Drop. Then: Cool.
 
-Before the roast, check the step 3 row for a feasibility warning. During
+Before the roast, check the step 2 row for a feasibility warning. During
 the roast, watch the dashed plan on Live: if BT runs well below it with the
 heater at 100 %, the behind-schedule warning appears; for the next roast
-lengthen step 3's ramp or lower its fan.
+lengthen step 2's ramp or lower its fan.
 
 ## Safety trips and cooldown
 

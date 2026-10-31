@@ -65,7 +65,7 @@ test('maxRorC follows core/roaster_model.cpp maxRorCpm', () => {
   assert.strictEqual(RS.model({ points: [] }, 'C'), null);
 });
 
-test('checkRecipe flags a ramp steeper than the model allows, from the setpoint before it', () => {
+test('checkRecipe flags a ramp steeper than the model allows, from the target before it', () => {
   const recipe = { chargeTemp: 200, steps: [
     { trigger: { type: 'event', value: 'TP' }, actions: [{ type: 'setpoint', value: 150 }] },
     { trigger: { type: 'time', value: 60 }, actions: [{ type: 'fan', value: 50 }, { type: 'setpoint', value: 210, ramp: 30, shape: 'front' }] },
@@ -84,6 +84,10 @@ test('checkRecipe flags a ramp steeper than the model allows, from the setpoint 
   // No saved model: nothing to check.
   assert.deepStrictEqual(RS.checkRecipe(recipe, 'C', null), []);
   // Model saved in F, recipe in C.
+  // The start is the BT estimate, not "chargeTemp": with no BT trigger and no
+  // setpoint before it, nothing to check.
+  assert.deepStrictEqual(RS.checkRecipe({ chargeTemp: 200, steps: [
+    { trigger: { type: 'event', value: 'TP' }, actions: [{ type: 'setpoint', value: 210, ramp: 30, shape: 'front' }] }] }, 'C', saved, 'C'), []);
   const savedF = { ambient: 77, runFan: 50, heaterMax: 90, points: [{ target: 302, tau: 120, hold: 30 }, { target: 428, tau: 140, hold: 45 }] };
   const m = RS.model(savedF, 'F');
   near(m.points[0].t, 150, 1e-9);
@@ -121,4 +125,24 @@ test('library checks and round-trips ramp shapes, power ramps and chargeTemp', (
   assert.deepStrictEqual(back[0].actions[0].curve, RS.PRESETS.back);
   assert.strictEqual(back[0].actions[1].shape, 'front');
   assert.match(L.describeStep(rec, 0, 'F', 'F'), /setpoint 400 °F over 2:00, custom, power 70 % over 0:30, front/);
+});
+
+test('rampStartEstimate matches the board: BT at the step, estimated from the trigger or the target before', () => {
+  near(RS.rampStartEstimate({ type: 'bt', value: 302 }, 100, 'F'), 150, 1e-9); // BT trigger wins
+  assert.strictEqual(RS.rampStartEstimate({ type: 'event', value: 'TP' }, 149, 'F'), 149); // previous target, C
+  assert.ok(Number.isNaN(RS.rampStartEstimate({ type: 'time', value: 60 }, NaN, 'C')));
+  assert.ok(Number.isNaN(RS.rampStartEstimate(undefined, undefined, 'C')));
+});
+
+test('checkRecipe starts a ramp at its BT trigger and skips one that starts at or above the target', () => {
+  const steep = { type: 'setpoint', value: 210, ramp: 30, shape: 'front' };
+  // Setpoint 150 before, but the ramp fires at BT 120: the climb is 120 -> 210.
+  const w = RS.checkRecipe({ steps: [
+    { trigger: { type: 'event', value: 'TP' }, actions: [{ type: 'setpoint', value: 150 }] },
+    { trigger: { type: 'bt', value: 120 }, actions: [steep] }] }, 'C', saved, 'C');
+  assert.strictEqual(w.length, 1);
+  near(w[0].needC, 90 / 30 * 60 * 2, 1e-9);
+  near(w[0].atC, 120, 1e-9);
+  // BT trigger above the target: the board holds the target, no ramp to check.
+  assert.deepStrictEqual(RS.checkRecipe({ steps: [{ trigger: { type: 'bt', value: 215 }, actions: [steep] }] }, 'C', saved, 'C'), []);
 });

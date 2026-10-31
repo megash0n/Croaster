@@ -185,7 +185,11 @@ roast clock) and ticks the runner. The runner returns controller commands
 submits them through `Controller::submit`, so every interlock applies. A
 setpoint ramp is a stream of `SetSetpoint` every 500 ms along the ramp's
 shape: the 21-point rate-of-climb curve gives progress F(t/T)
-(`recipe::rampFraction`). A power ramp is the same stream of `SetHeater`
+(`recipe::rampFraction`). It starts at the PID input when the step applies
+(`recipe::rampStartC`: BT by default, whatever mode or setpoint came
+before); its first `SetSetpoint` carries `b = 1`, which makes the
+controller restart the PID bumpless from the present heater output. With BT
+already at or above the target the step just sends the target. A power ramp is the same stream of `SetHeater`
 from the heater % at the step. `chargeTemp` sends PID and its setpoint once
 on the first tick after Start. `ControlPlugin`
 calls the plugin's stop hook on `stop`, Stop and emergency off, which aborts

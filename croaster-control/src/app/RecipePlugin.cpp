@@ -81,6 +81,7 @@ recipe::Inputs RecipePlugin::inputs() const {
     in.trip = s.trip;
     in.setpointC = s.setpoint;
     in.heaterPct = s.heaterPct;
+    in.pidInput = s.pidInput;
     if (!app_)
         return in;
     CroasterCore& core = app_->core();

@@ -314,6 +314,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- **Setpoint ramps start at BT (D32, T64).** A recipe setpoint ramp now
+  starts at the PID input when the step applies (BT by default), not at the
+  board's previous setpoint, and the PID restarts from the present heater
+  output, so a ramp after Manual power steps no longer cuts the heater and
+  stalls BT. With BT already at or above the target the step holds the
+  target without a ramp. The editor's ramp check starts at the step's BT
+  trigger, else the previous setpoint target. A plain setpoint step before
+  the first ramp is no longer needed.
 - **Autotune test points (T58).** Defaults lowered from 300/350/400 °F to
   250/300/350 °F (`CPID_AUTOTUNE_POINT*_C` 121.1/148.9/176.7). The build
   bypasses the roaster's own thermal cutoff, so the firmware's limits are the
