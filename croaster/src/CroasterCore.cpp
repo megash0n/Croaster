@@ -55,8 +55,9 @@ void CroasterCore::readSensors() {
     roastTimer = roastTimerElapsedMs() / 1000.0; // roast elapsed time (seconds)
 
     if (useDummyData) {
-        tempBt = random(30, 40) + correctionBt;
-        tempEt = random(30, 40) + correctionEt;
+        // Local change to upstream: dummy readings are Celsius, so convert them to the display unit like real ones.
+        tempBt = convertTemperature(random(30, 40)) + correctionBt;
+        tempEt = convertTemperature(random(30, 40)) + correctionEt;
 
         return;
     }

@@ -151,7 +151,9 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   correction offsets rescaled on a `tempUnit` change (D22), two
   warning fixes (`CroasterBleManager` initializer order,
   `CroasterDeviceIdentity` `PRIX32` format), the WebSocket client count read
-  from `server.connectedClients()` (T60, could be offered upstream), and `MAX6675_Thermocouple` from
+  from `server.connectedClients()` (T60, could be offered upstream), dummy
+  readings converted to the display unit in `readSensors()` (T61, could be
+  offered upstream), and `MAX6675_Thermocouple` from
   Shawn's fork at `v2.0.3` with `SmoothThermocoupleFix.cpp` removed (D21).
 - `MAX6675_Thermocouple` fork: <https://github.com/shawns1234/MAX6675_Thermocouple>,
   default branch `master`, no review branch (Shawn's call); release tags
@@ -221,6 +223,10 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 - Confirm `boardName()` strings against the ICRM app's `CroasterBoardTypes`.
 
 ## Gotchas
+- Dummy mode (`CMON_DUMMY_DATA`) only fakes Croaster's `tempBt`/`tempEt`
+  (display unit, T61). On Croaster PID the control task still reads the real
+  probes, so PID, autotune and safety see NaN without probes; only the
+  recipe runner (`RecipePlugin::inputs()`) reads the core values.
 - WebSockets 2.7.3 raises `DISCONNECTED` for every closed slot, including
   connections that never upgraded; count clients with `connectedClients()`,
   not ++/-- per event (T60). The ICRM app needs the periodic broadcast

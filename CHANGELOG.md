@@ -123,6 +123,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `docs/artisan-settings.md`.
 
 ### Fixed
+- **Dummy readings in Celsius while the unit is °F or K (T61).** Local
+  change to upstream code (`croaster/src/CroasterCore.cpp`
+  `readSensors()`), suitable to offer upstream. With dummy data on, BT and ET
+  were `random(30, 40)` plus the correction with no unit conversion, so a
+  board in °F reported 30–39 instead of about 86–102 °F. The random Celsius
+  value now goes through `convertTemperature()` before the correction is
+  added, like a real reading. Only dummy mode is affected; on Croaster PID
+  the heater, fan, PID, autotune and safety use the control task's own probe
+  readings, not these values.
 - **ICRM app reconnected every ~10 s over WebSocket (T60).** Local change to
   upstream code (`croaster/src/CroasterWebSocketManager.cpp`), suitable to
   offer upstream. The WebSocket client count was incremented on `CONNECTED`

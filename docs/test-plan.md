@@ -84,6 +84,11 @@ Stock MAX6675 boards (`esp32s3`, `esp32c3`, `esp8266`) read probes through
 - Artisan and the page connected together → both keep 1 s data, no reconnects. **untested**
 - Release build: control loop timing unchanged with the page open (`docs/design.md` D27 "Loop timing"). **untested**
 
+## Dummy data (T61)
+- Dummy BT/ET pass through `convertTemperature()` before the correction (upstream skipped it). **host** `test_dummy_readings_use_display_unit`
+- Dummy readings with no correction → about 86-104 °F, 30-40 °C, 303-313 K; the recipe runner reads them back as 30-39 °C. **host** `test_dummy_reading_ranges`
+- `CMON_DUMMY_DATA 1`, unit F → OLED, page and ICRM show about 86-102 °F; switch to C → 30-39. **untested** (bench todo)
+
 ## WebSocket and ICRM app (T60)
 - Connections closed before the upgrade, then the app connects → client count 1, broadcast runs (upstream count reached -13). **host** `test_ws_upstream_count_goes_negative`, `test_ws_count_after_unfinished_connections`
 - `CroasterWebSocketManager` reads the count from `server.connectedClients()` and still broadcasts `getJsonData()` every `interval` s. **host** `test_ws_manager_source_counts_from_library`
