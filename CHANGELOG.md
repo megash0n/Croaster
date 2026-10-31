@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Recipe ramp shapes (D31, T63).** Setpoint and power ramps take `shape`
+  (`linear`, `normal`, `front`, `back`, `custom` with a 21-point `curve`):
+  the curve is the rate of climb over the ramp, so `front` gives a declining
+  rate of rise. Power ramps move the heater from its current %. Optional
+  recipe `chargeTemp` preheats in PID on Start. `getRecipe` reports
+  `chargeTemp` and the running `ramp`. Page: Shape dropdown with preview,
+  curve editor, Charge input, a warning when a ramp needs more than the
+  saved roaster model can deliver, and the planned SV on Live.
 - **Autotune fan test, feedforward and fan assist (D30, T62).** An optional
   stage after the PID points, on by default (`CPID_AUTOTUNE_FAN_TEST`,
   **Fan test** in the new start dialog, `{"command":"autotune","fanTest":false}`

@@ -231,6 +231,30 @@ Bench run (adds about 30 min to the autotune bench run above):
    once BT is back on the setpoint. STOP → fan goes to the cooldown speed,
    no assist. Toggle off in Controls → no assist; survives a reboot.
 
+## Recipe ramp shapes and charge temperature (D31, T63)
+- Shapes: F(0) = 0, F(1) = 1, `front` = 2u − u², `back` = u², `normal` symmetric, peak factors; parse errors for bad shape, curve without `custom`, wrong length, rates outside 0..100, all-zero curve, more than 8 curves, `fan` with a ramp. **host** `test_shape_fraction`, `test_shape_parse`
+- Runner: shaped setpoint ramp reaches each F(t/T) point and the target at T; power ramp from the current heater % with `hold`; `chargeTemp` sends PID and the setpoint once and is not followed; `getRecipe` `ramp` and `chargeTemp`. **host** `test_shaped_setpoint_ramp`, `test_power_ramp_and_hold`, `test_charge_temp_preheat`
+- Drum simulation, 150 → 200 °C over 5 min: BT RoR follows the shape (front 15.9 then 3.4 °C/min, back 4.7 then 13.7), overshoot under 2.5 °C except `back` (5 °C, momentum). **host** `test_shaped_ramps_on_drum`
+- Page: presets match the board, editor round trip keeps shape and curve, feasibility warning against the saved model, scripts load before `app.js`. **host** `ramp.test.js`, `library.test.js`, `web_check.test.js`
+- Curve editor in a 412 px window: drag, snap, presets, preview, Use curve. **build 2026-10-31** (headless browser); phone untested
+
+Bench run (after a saved autotune with the fan test):
+
+1. Recipe editor: set Charge 350 °F; step at BT 300 °F: setpoint 390 °F
+   over 4:00, shape `front`; step at FC_START: setpoint 410 °F over 1:30,
+   shape `normal`. A step asking 100 °F in 0:30 shows the warning under it.
+2. Load to device and Start: the board goes to PID 350 °F; no
+   behind-schedule warning while preheating.
+3. Charge, then at BT 300 °F: SV climbs fast first, then slowly; Live shows
+   the dashed planned SV and "Setpoint ramp 300 °F → 390 °F, front, 0:40 of
+   4:00."
+4. Compare BT RoR with the shape: falling during `front`, rising then
+   falling during `normal`. Note lag and overshoot at the end of each ramp.
+5. Power ramp: step with power 80 % over 1:00, `back`: heater moves slowly
+   first, reaches 80 % at 1:00; `hold` mid-ramp stops it.
+6. Curve editor on the phone: drag points, presets, Use curve, Save; the
+   profile reloads with the same curve.
+
 ## Autotune required (D24)
 - `CPID_REQUIRE_AUTOTUNE 1`, erased flash (`pio run -t erase`, then upload) → `getControl` `tuned` false; `{"command":{"mode":"pid"}}` → mode stays Manual, `autotune` "autotune required", OLED "Autotune first" for 10 s. **host** (gate and text, `test_autotune_required_gate`); bench todo
 - Same board, profile loaded, `startProfile` → refused the same way; profile still loaded. **host** (gate); bench todo

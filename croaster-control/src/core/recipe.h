@@ -17,11 +17,20 @@
 //   op: "gte" (default) | "lte" | "near" (|x - value| <= "tol"; default 5 s, 2 C, 1 C/min)
 // Actions (1..4 per step):
 //   power v     Manual mode, heater v %             fan v        fan v %
-//   setpoint v  PID mode, target v; "ramp": s ramps linearly from the current setpoint
-//   hold        stop a setpoint ramp and keep the outputs as they are
+//   setpoint v  PID mode, target v
+//   hold        stop a ramp and keep the outputs as they are
+//   power and setpoint take "ramp": s (0..3600) to move there from the current
+//   value instead of at once, and "shape" for how the rate of climb is spread
+//   over the ramp: "linear" (default, constant), "normal" (slow, fast, slow),
+//   "front" (fast first, easing into the target), "back" (slow first) or
+//   "custom" with "curve": 21 rates 0..100 at 0, 5, ... 100 % of the ramp time.
+//   The value at time t is start + (target - start) * F(t / ramp), F the
+//   normalised running area under the rate curve.
 //   cool        the stop command: heater off, Manual, cooldown fan; ends the recipe
 //   end         ends the recipe, outputs unchanged
 //   note        "text" (up to 80 characters) shown on the page; changes nothing
+// "chargeTemp" (optional, 0..350 C): when the recipe starts before CHARGE, PID
+// heats to this setpoint so the drum is ready for the beans.
 //
 // Firing: a step fires once, on a false-to-true change of its condition seen
 // while the recipe runs (a condition already true at start must go false
@@ -49,6 +58,8 @@ constexpr float kMaxTimeS = 3600;
 constexpr float kMinTempC = 0, kMaxTempC = 350;
 constexpr float kMinRorC = -50, kMaxRorC = 100;
 constexpr float kMaxRampS = 3600;
+constexpr size_t kCurvePoints = 21; // rate at 0, 5, ... 100 % of the ramp time
+constexpr size_t kMaxCurves = 8;    // custom curves per recipe
 
 enum class Event : uint8_t { Charge, Tp, DryEnd, FcStart, FcEnd, ScStart, ScEnd, Drop, Count };
 // "CHARGE" ... "DROP"; false for anything else.
@@ -58,6 +69,20 @@ const char* eventName(Event e);
 enum class TriggerType : uint8_t { Time, Bt, Et, Ror, Event };
 enum class Op : uint8_t { Gte, Lte, Near };
 enum class ActionType : uint8_t { Power, Fan, Setpoint, Hold, Cool, End, Note };
+enum class Shape : uint8_t { Linear, Normal, Front, Back, Custom };
+
+// "linear" ... "custom"; false for anything else.
+bool parseShape(const char* s, Shape& out);
+const char* shapeName(Shape s);
+// The rate curve of a built-in shape (kCurvePoints values, 0..100); nullptr for Custom.
+const uint8_t* shapeRates(Shape s);
+// Fraction of the change done at `u` (0..1) of the ramp time: the area under
+// the piecewise-linear rate curve up to `u` over the whole area. Clamped to
+// 0..1; a curve with no area gives u (linear).
+float rampFraction(const uint8_t* rates, float u);
+// Highest rate over the mean rate: how much steeper than a linear ramp the
+// steepest part is. `atU` gets where it is (0..1). 1 for a flat curve.
+float peakFactor(const uint8_t* rates, float* atU = nullptr);
 
 struct Trigger {
     TriggerType type = TriggerType::Time;
@@ -70,6 +95,8 @@ struct Action {
     ActionType type = ActionType::Note;
     float value = 0; // %, or C for setpoint
     float rampS = 0;
+    Shape shape = Shape::Linear;
+    uint8_t curve = 0; // index into Recipe::curves when shape is Custom
 };
 struct Step {
     Trigger trigger;
@@ -79,8 +106,13 @@ struct Step {
 };
 struct Recipe {
     bool guided = false;
+    float chargeC = NAN; // preheat setpoint before CHARGE; NaN = none
     Step steps[kMaxSteps];
     size_t count = 0;
+    uint8_t curves[kMaxCurves][kCurvePoints] = {};
+    uint8_t curveCount = 0;
+    // The rate curve an action ramps along.
+    const uint8_t* rates(const Action& a) const;
 };
 
 // Parses and checks a recipe object; temperatures are in `unit` ('C', 'F' or
@@ -133,7 +165,8 @@ struct Inputs {
     uint32_t nowMs = 0;
     float btC = NAN, etC = NAN, rorC = NAN; // NaN = no reading
     SafetyTrip trip = SafetyTrip::None;
-    float setpointC = 0; // current controller setpoint (ramp start)
+    float setpointC = 0; // current controller setpoint (setpoint ramp start)
+    float heaterPct = 0; // current heater output (power ramp start)
 };
 
 enum class State : uint8_t { Empty, Ready, Running, Done, Aborted };
@@ -206,13 +239,18 @@ public:
     bool ramping() const {
         return rampActive_;
     }
+    // The ramp in progress (valid while ramping()): a heater ramp in %, or a
+    // setpoint ramp in C, `elapsedS` of `rampS` done along `rates`.
+    struct Ramp {
+        bool power = false;
+        float from = 0, to = 0, rampS = 0, elapsedS = 0;
+        const uint8_t* rates = nullptr;
+    };
+    Ramp ramp(uint32_t nowMs) const;
     // True after a setpoint step (PID follows the target), false after a
     // power step or before either: the page's behind-schedule warning.
     bool followingSetpoint() const {
         return followSetpoint_;
-    }
-    float rampTargetC() const {
-        return rampToC_;
     }
 
 private:
@@ -232,8 +270,12 @@ private:
     size_t firedCount_ = 0;
     uint32_t seq_ = 0; // increments on every fired step and state change
     int prompt_ = -1;
+    void startRamp(const Action& a, float from, uint32_t nowMs, Output& out);
     bool rampActive_ = false;
-    float rampFromC_ = 0, rampToC_ = 0, rampS_ = 0;
+    bool rampPower_ = false;
+    bool pendingCharge_ = false;
+    const uint8_t* rampRates_ = nullptr;
+    float rampFromC_ = 0, rampToC_ = 0, rampS_ = 0; // % for a power ramp
     uint32_t rampStartMs_ = 0, rampSentMs_ = 0;
     bool pendingEnd_ = false;
     bool followSetpoint_ = false;

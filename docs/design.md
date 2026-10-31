@@ -322,6 +322,7 @@ New 2026-10-31, open for Shawn:
 | Decision | Summary |
 |:---|:---|
 | D30 | Autotune fan test, fan and ramp feedforward, fan assist. |
+| D31 | Recipe ramp shapes (rate-of-climb curves), power ramps, charge temperature, ramp feasibility check. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1381,7 +1382,7 @@ Decisions (Shawn approved 1 to 3 on 2026-10-29):
     Steps that are true in the same tick fire together, in order.
   - Actions: `power` (switches to Manual with that heater %), `fan`,
     `setpoint` (switches to PID; optional `ramp` seconds moves the target
-    linearly from the current setpoint), `hold` (stops a ramp where it is),
+    from the current setpoint, linear or shaped, D31), `hold` (stops a ramp where it is),
     `cool` (the same as STOP: heater 0, cooldown fan, recipe ends), `end`
     (recipe ends, outputs stay), `note` (logged only).
   - **(1) The editor's default step is heater % plus fan % (open loop).**
@@ -1525,6 +1526,73 @@ and `Settings`, `autotune::makeFanLevels`, `FanTestResult`,
 `CPID_FAN_FEEDFORWARD`, `CPID_RAMP_FEEDFORWARD`, `CPID_FAN_ASSIST*`
 settings, NVS keys `model` and `fanAs`, protocol `fanTest`, `fanAssist`,
 `FanAssist`, `fanEstimate`, `saved`.
+
+### D31. Recipe ramp shapes, power ramps and charge temperature — new 2026-10-31, open for Shawn
+Shawn: "vertical axis mean - rate of climb". A ramp step says how BT should
+climb, not only where it ends: a roast is steered by its rate of rise, and a
+ramp that is fast early and eases off (a declining RoR) is the usual way to
+approach first crack without a flick or a crash.
+
+- **Shape = rate-of-climb curve.** A `setpoint` or `power` action with
+  `ramp` > 0 takes `shape`: `linear` (default), `normal`, `front`, `back` or
+  `custom` with `curve`, 21 rates 0..100 at 0, 5, ..., 100 % of the ramp
+  time. The curve is the relative rate of climb; its normalised area is the
+  progress F(u), so the target is `start + (target − start) · F(t/T)` and
+  always reaches the target at T. Presets: `linear` constant; `front`
+  falling from 100 to 0 (F = 2u − u², steepest at the start); `back` rising
+  from 0 to 100 (F = u², steepest at the end); `normal` a bell, peak at mid
+  ramp. Peak rate over mean rate: 1, 2.03, 2, 2.
+- **Power ramps.** `power` with `ramp` moves the heater from its current %
+  to the target over the time, with the same shapes (Manual mode). Power and
+  setpoint ramps share one ramp: a later action replaces it, `hold` stops it.
+  `fan` refuses `ramp` and `shape` (fan assist and feedforward act on the
+  fan; a recipe sets it per step).
+- **Charge temperature.** Optional recipe `chargeTemp` (recipe unit,
+  0..350 °C): on Start the board switches to PID at that setpoint once, to
+  preheat for charge. It is not a followed step, so the behind-schedule
+  warning stays off until the first setpoint step.
+- **Limits.** Up to 8 custom curves per recipe (stored once in the runner,
+  21 bytes each); a curve needs a rate above 0.
+- **Feasibility (page).** With a saved roaster model (D30) the editor checks
+  each setpoint ramp: the steepest rate needed, (to − from)/T · 60 · peak
+  factor, against the model's maximum rate of rise at that temperature and
+  fan with the heater at the saved
+  model's ceiling, and warns under the step. The start is the
+  previous setpoint step, else `chargeTemp`, else the step's BT trigger.
+- **Live.** `getRecipe` adds `chargeTemp` and, while a ramp runs, `ramp`
+  (`kind`, `from`, `to`, `duration`, `elapsed`, `rates`); Live draws the rest
+  of a setpoint ramp as a dashed planned SV and shows the ramp line. The
+  behind-schedule warning follows the shaped SV because the board's SV is
+  shaped.
+- **Editor.** Shape dropdown with a preview; **Edit** opens a curve editor
+  (drag points, snap to 5, presets, live path preview, steepest point text),
+  sized for a 412 px phone screen and themed.
+- **Simulation** (drum model, fan 60 %, 150 → 200 °C over 5 min, ramp and
+  fan feedforward, `test_shaped_ramps_on_drum`): BT rate of rise in the
+  first/second half of the ramp, against the path's 10/10, 15/5 or 5/15:
+
+  | Shape | RoR 1st / 2nd half °C/min | lag RMS / max °C | overshoot °C | peak need / model max at heater 90 % °C/min |
+  |:---|:---|:---|:---|:---|
+  | linear | 10.3 / 8.5 | 2.9 / 5.2 | 1.8 | 10 / 28 |
+  | normal | 8.8 / 9.2 | 2.5 / 5.2 | 0.3 | 20 / 21 |
+  | front | 15.9 / 3.4 | 4.6 / 9.1 | 0.5 | 20 / 28 |
+  | back | 4.7 / 13.7 | 1.9 / 4.6 | 5.0 | 20 / 15 |
+
+  `front` produces the declining RoR it asks for; its lag is the dead time
+  at the steep start. `back` ends at its fastest rate, so BT carries
+  momentum past the target, and here it asks for more than the model allows
+  near 200 °C (the editor warns).
+- **Cost:** page 62 135 B gzipped (+7 152, new `ramp.js`); recipe runner
+  +168 B for the curves. `esp32s3-pid` with D30 and D31: RAM 66 768 B,
+  flash 2 037 935 B; monitor flash 1 761 499 B (page only).
+- **New names, pending Shawn's confirmation:** `recipe::Shape`,
+  `kCurvePoints`, `kMaxCurves`, `parseShape`, `shapeName`, `shapeRates`,
+  `rampFraction`, `peakFactor`, `Recipe::chargeC`, `curves`, `curveCount`,
+  `rates()`, `Inputs::heaterPct`, `Runner::Ramp`, `Runner::ramp()`,
+  `startRamp`; JSON `shape`, `curve`, `chargeTemp`, `getRecipe` `ramp`; page
+  `ramp.js` (`RampShape`), `#curve-dialog`, `.sv-plan`.
+- **To confirm:** the four presets, the 8-curve limit, preheat not counting
+  as a followed step, power ramps allowed for every shape.
 
 ## Build platform and sdkconfig
 - Default: `platformio/espressif32 @ 8.0.0` (Arduino-ESP32 3.3.12, IDF 5.5).

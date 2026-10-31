@@ -1,10 +1,20 @@
 #include "recipe.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace recipe {
 
 namespace {
+const char* const kShapeNames[] = {"linear", "normal", "front", "back", "custom"};
+// Rate of climb at 0, 5, ... 100 % of the ramp time (0..100, steps of 5).
+const uint8_t kLinear[kCurvePoints] = {50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                                       50, 50, 50, 50, 50, 50, 50, 50, 50, 50};
+// exp(-((u - 0.5) / 0.2)^2 / 2), rounded to steps of 5 (low ends kept above 0).
+const uint8_t kNormal[kCurvePoints] = {5, 10, 15, 20, 30, 45, 60, 75, 90, 95, 100, 95, 90, 75, 60, 45, 30, 20, 15, 10, 5};
+const uint8_t kFront[kCurvePoints] = {100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0};
+const uint8_t kBack[kCurvePoints] = {0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100};
+
 const char* const kEventNames[] = {"CHARGE", "TP", "DRY_END", "FC_START", "FC_END", "SC_START", "SC_END", "DROP"};
 static_assert(sizeof(kEventNames) / sizeof(kEventNames[0]) == static_cast<size_t>(Event::Count), "event names");
 
@@ -101,13 +111,47 @@ const char* parseTrigger(JsonVariantConst j, char unit, Trigger& t) {
     return "";
 }
 
-const char* parseAction(JsonVariantConst j, char unit, Action& a) {
+// "ramp", "shape" and "curve" of a power or setpoint action.
+const char* parseRamp(JsonVariantConst j, Action& a, Recipe& r) {
+    if (!j["ramp"].isNull() && (!number(j["ramp"], a.rampS) || !(a.rampS >= 0 && a.rampS <= kMaxRampS)))
+        return "ramp must be 0..3600 s";
+    JsonVariantConst shape = j["shape"];
+    if (!shape.isNull() && !parseShape(shape.as<const char*>(), a.shape))
+        return "shape must be linear, normal, front, back or custom";
+    if (a.shape != Shape::Custom)
+        return j["curve"].isNull() ? "" : "curve needs shape custom";
+    JsonArrayConst c = j["curve"].as<JsonArrayConst>();
+    if (c.isNull() || c.size() != kCurvePoints)
+        return "curve must have 21 rates";
+    if (r.curveCount >= kMaxCurves)
+        return "a recipe has up to 8 custom curves";
+    uint8_t* out = r.curves[r.curveCount];
+    int sum = 0;
+    size_t i = 0;
+    for (JsonVariantConst v : c) {
+        float x = 0;
+        if (!percent(v, x))
+            return "curve rates must be 0..100";
+        out[i] = static_cast<uint8_t>(std::lround(x));
+        sum += out[i++];
+    }
+    if (sum == 0)
+        return "curve needs a rate above 0";
+    a.curve = r.curveCount++;
+    return "";
+}
+
+const char* parseAction(JsonVariantConst j, char unit, Action& a, Recipe& r) {
     if (!j.is<JsonObjectConst>())
         return "action must be an object";
     const char* type = j["type"];
     if (eq(type, "power") || eq(type, "fan")) {
         a.type = eq(type, "power") ? ActionType::Power : ActionType::Fan;
-        return percent(j["value"], a.value) ? "" : "power and fan must be 0..100 %";
+        if (!percent(j["value"], a.value))
+            return "power and fan must be 0..100 %";
+        if (a.type == ActionType::Fan)
+            return j["ramp"].isNull() && j["shape"].isNull() ? "" : "fan does not ramp";
+        return parseRamp(j, a, r);
     }
     if (eq(type, "setpoint")) {
         a.type = ActionType::Setpoint;
@@ -117,9 +161,7 @@ const char* parseAction(JsonVariantConst j, char unit, Action& a) {
         a.value = toCelsius(v, unit);
         if (!(a.value >= kMinTempC && a.value <= kMaxTempC))
             return "setpoint must be 0..350 C";
-        if (!j["ramp"].isNull() && (!number(j["ramp"], a.rampS) || !(a.rampS >= 0 && a.rampS <= kMaxRampS)))
-            return "ramp must be 0..3600 s";
-        return "";
+        return parseRamp(j, a, r);
     }
     if (eq(type, "hold")) {
         a.type = ActionType::Hold;
@@ -142,6 +184,80 @@ const char* parseAction(JsonVariantConst j, char unit, Action& a) {
     return "action type must be power, fan, setpoint, hold, cool, end or note";
 }
 } // namespace
+
+bool parseShape(const char* s, Shape& out) {
+    for (size_t i = 0; i < sizeof(kShapeNames) / sizeof(kShapeNames[0]); i++)
+        if (eq(s, kShapeNames[i])) {
+            out = static_cast<Shape>(i);
+            return true;
+        }
+    return false;
+}
+
+const char* shapeName(Shape s) {
+    const size_t i = static_cast<size_t>(s);
+    return i < sizeof(kShapeNames) / sizeof(kShapeNames[0]) ? kShapeNames[i] : "linear";
+}
+
+const uint8_t* shapeRates(Shape s) {
+    switch (s) {
+    case Shape::Normal:
+        return kNormal;
+    case Shape::Front:
+        return kFront;
+    case Shape::Back:
+        return kBack;
+    case Shape::Custom:
+        return nullptr;
+    default:
+        return kLinear;
+    }
+}
+
+float rampFraction(const uint8_t* rates, float u) {
+    if (!(u > 0))
+        return 0;
+    if (u >= 1 || !rates)
+        return u >= 1 ? 1 : u;
+    constexpr size_t n = kCurvePoints - 1;
+    float total = 0, done = 0;
+    const float pos = u * n;
+    for (size_t i = 0; i < n; i++) {
+        const float a = rates[i], b = rates[i + 1];
+        total += (a + b) / 2;
+        if (pos >= i + 1)
+            done += (a + b) / 2;
+        else if (pos > i) {
+            const float x = pos - i; // trapezoid up to x of this segment
+            done += a * x + (b - a) * x * x / 2;
+        }
+    }
+    return total > 0 ? fminf(1, fmaxf(0, done / total)) : u;
+}
+
+float peakFactor(const uint8_t* rates, float* atU) {
+    if (atU)
+        *atU = 0;
+    if (!rates)
+        return 1;
+    constexpr size_t n = kCurvePoints - 1;
+    float total = 0;
+    size_t peak = 0;
+    for (size_t i = 0; i < n; i++)
+        total += (rates[i] + rates[i + 1]) / 2.0f;
+    for (size_t i = 1; i < kCurvePoints; i++)
+        if (rates[i] > rates[peak])
+            peak = i;
+    if (atU)
+        *atU = static_cast<float>(peak) / n;
+    return total > 0 ? rates[peak] / (total / n) : 1;
+}
+
+const uint8_t* Recipe::rates(const Action& a) const {
+    if (a.shape != Shape::Custom)
+        return shapeRates(a.shape);
+    return a.curve < curveCount ? curves[a.curve] : kLinear;
+}
 
 bool parseEvent(const char* s, Event& out) {
     for (size_t i = 0; i < static_cast<size_t>(Event::Count); i++)
@@ -203,6 +319,20 @@ void writeStatus(JsonObject r, const Runner& run, const RoastClock& clock, uint3
         r["next"] = run.next();
         r["prompt"] = run.prompt();
         r["follow"] = run.state() == State::Running && run.followingSetpoint();
+        if (std::isfinite(run.recipe().chargeC))
+            r["chargeTemp"] = std::round(fromCelsius(run.recipe().chargeC, unit) * 10) / 10;
+    }
+    if (run.state() == State::Running && run.ramping()) {
+        const Runner::Ramp rp = run.ramp(nowMs);
+        JsonObject o = r["ramp"].to<JsonObject>();
+        o["kind"] = rp.power ? "power" : "setpoint";
+        o["from"] = std::round(rp.from * 10) / 10; // %, or C for a setpoint ramp
+        o["to"] = std::round(rp.to * 10) / 10;
+        o["duration"] = rp.rampS;
+        putSeconds(o, "elapsed", rp.elapsedS);
+        JsonArray c = o["rates"].to<JsonArray>();
+        for (size_t i = 0; rp.rates && i < kCurvePoints; i++)
+            c.add(rp.rates[i]);
     }
     putSeconds(r, "sinceCharge", clock.sinceCharge(nowMs));
     JsonObject ev = r["events"].to<JsonObject>();
@@ -230,6 +360,16 @@ const char* parse(JsonObjectConst j, char unit, Recipe& out) {
     if (!eq(mode, "auto") && !eq(mode, "guided"))
         return "mode must be auto or guided";
     out.guided = eq(mode, "guided");
+    out.chargeC = NAN;
+    out.curveCount = 0;
+    if (!j["chargeTemp"].isNull()) {
+        float v = 0;
+        if (!number(j["chargeTemp"], v))
+            return "chargeTemp must be a number";
+        out.chargeC = toCelsius(v, unit);
+        if (!(out.chargeC >= kMinTempC && out.chargeC <= kMaxTempC))
+            return "chargeTemp must be 0..350 C";
+    }
     JsonArrayConst steps = j["steps"].as<JsonArrayConst>();
     if (steps.isNull() || steps.size() == 0 || steps.size() > kMaxSteps)
         return "a recipe has 1 to 32 steps";
@@ -253,7 +393,7 @@ const char* parse(JsonObjectConst j, char unit, Recipe& out) {
         if (actions.isNull() || actions.size() == 0 || actions.size() > kMaxActions)
             return "a step has 1 to 4 actions";
         for (JsonVariantConst a : actions) {
-            e = parseAction(a, unit, st.actions[st.actionCount]);
+            e = parseAction(a, unit, st.actions[st.actionCount], out);
             if (*e)
                 return e;
             st.actionCount++;
@@ -347,6 +487,7 @@ bool Runner::start() {
     prompt_ = -1;
     rampActive_ = false;
     pendingEnd_ = false;
+    pendingCharge_ = std::isfinite(recipe_.chargeC);
     followSetpoint_ = false;
     reason_ = "";
     state_ = State::Running;
@@ -426,6 +567,30 @@ void Runner::record(uint8_t i, float atS, Outcome o) {
     seq_++;
 }
 
+void Runner::startRamp(const Action& a, float from, uint32_t nowMs, Output& out) {
+    rampActive_ = true;
+    rampPower_ = a.type == ActionType::Power;
+    rampRates_ = recipe_.rates(a);
+    rampFromC_ = from;
+    rampToC_ = a.value;
+    rampS_ = a.rampS;
+    rampStartMs_ = rampSentMs_ = nowMs;
+    out.add(rampPower_ ? Command::Kind::SetHeater : Command::Kind::SetSetpoint, from);
+}
+
+Runner::Ramp Runner::ramp(uint32_t nowMs) const {
+    Ramp r;
+    if (!rampActive_)
+        return r;
+    r.power = rampPower_;
+    r.from = rampFromC_;
+    r.to = rampToC_;
+    r.rampS = rampS_;
+    r.elapsedS = fminf(rampS_, (nowMs - rampStartMs_) / 1000.0f);
+    r.rates = rampRates_;
+    return r;
+}
+
 void Runner::apply(const Step& s, const Inputs& in, Output& out) {
     for (uint8_t k = 0; k < s.actionCount; k++) {
         const Action& a = s.actions[k];
@@ -434,7 +599,10 @@ void Runner::apply(const Step& s, const Inputs& in, Output& out) {
             rampActive_ = false;
             followSetpoint_ = false;
             out.add(Command::Kind::SetMode, static_cast<float>(Mode::Manual));
-            out.add(Command::Kind::SetHeater, fmaxf(0, fminf(100, a.value)));
+            if (a.rampS > 0 && std::isfinite(in.heaterPct))
+                startRamp(a, fmaxf(0, fminf(100, in.heaterPct)), in.nowMs, out);
+            else
+                out.add(Command::Kind::SetHeater, fmaxf(0, fminf(100, a.value)));
             break;
         case ActionType::Fan:
             out.add(Command::Kind::SetFan, fmaxf(0, fminf(100, a.value)));
@@ -442,18 +610,11 @@ void Runner::apply(const Step& s, const Inputs& in, Output& out) {
         case ActionType::Setpoint:
             out.add(Command::Kind::SetMode, static_cast<float>(Mode::Pid));
             followSetpoint_ = true;
-            rampToC_ = a.value;
-            if (a.rampS > 0) {
-                rampActive_ = true;
-                rampFromC_ = in.setpointC;
-                rampToC_ = a.value;
-                rampS_ = a.rampS;
-                rampStartMs_ = rampSentMs_ = in.nowMs;
-                out.add(Command::Kind::SetSetpoint, rampFromC_);
-            } else {
-                rampActive_ = false;
+            rampActive_ = false;
+            if (a.rampS > 0)
+                startRamp(a, in.setpointC, in.nowMs, out);
+            else
                 out.add(Command::Kind::SetSetpoint, a.value);
-            }
             break;
         case ActionType::Hold:
             rampActive_ = false;
@@ -497,6 +658,13 @@ void Runner::tick(const Inputs& in, const RoastClock& clock, Output& out) {
         finish(State::Aborted, tripName(in.trip));
         return;
     }
+    if (pendingCharge_) { // preheat to the charge temperature, once, before CHARGE
+        pendingCharge_ = false;
+        if (!clock.charged()) {
+            out.add(Command::Kind::SetMode, static_cast<float>(Mode::Pid));
+            out.add(Command::Kind::SetSetpoint, recipe_.chargeC);
+        }
+    }
     Cond cond[kMaxSteps];
     for (size_t i = 0; i < recipe_.count; i++) {
         cond[i] = done_[i] ? Cond::Unknown : evaluate(recipe_.steps[i].trigger, in, clock);
@@ -515,7 +683,9 @@ void Runner::tick(const Inputs& in, const RoastClock& clock, Output& out) {
 
     if (rampActive_ && in.nowMs - rampSentMs_ >= kRampEveryMs) {
         const float p = fminf(1, (in.nowMs - rampStartMs_) / 1000.0f / rampS_);
-        out.add(Command::Kind::SetSetpoint, rampFromC_ + (rampToC_ - rampFromC_) * p);
+        const float f = p >= 1 ? 1 : rampFraction(rampRates_, p);
+        out.add(rampPower_ ? Command::Kind::SetHeater : Command::Kind::SetSetpoint,
+                rampFromC_ + (rampToC_ - rampFromC_) * f);
         rampSentMs_ = in.nowMs;
         if (p >= 1)
             rampActive_ = false;

@@ -111,6 +111,7 @@
           <button type="button" id="rl-apply">Set now</button>
           <button type="button" class="ghost" id="rl-dismiss">Skip</button>
         </div>
+        <p class="small" id="rl-ramp"></p>
         <p class="small" id="rl-next"></p>
         <ol class="recipe-fired small" id="rl-fired"></ol>
       </div>
@@ -252,6 +253,7 @@
               <option value="auto">Auto: the board applies each step</option>
               <option value="guided">Guided: the board asks first</option>
             </select></label>
+            <label class="small" title="Before Charge, Run recipe heats to this setpoint (PID) so the drum is ready for the beans. Blank: no preheat.">Charge at <input type="number" id="recipe-charge" step="any" placeholder="none"> <span data-unit></span></label>
             <label class="small" title="Shown on Live when a setpoint step runs, BT lags the setpoint by this much and the heater has been at 100 % for 20 s">Behind-schedule warning at <input type="number" id="recipe-lag" min="1" max="50" step="1"> <span data-unit></span></label>
           </div>
           <table class="profile recipe-table" id="recipe-table">
@@ -346,6 +348,22 @@
   </form>
 </dialog>
 
+<dialog id="curve-dialog" aria-labelledby="curve-title">
+  <form method="dialog">
+    <h2 id="curve-title">Ramp shape</h2>
+    <p class="small muted">Rate of climb over the ramp time: drag to draw it. Rates snap to steps of 5; only their proportions matter.</p>
+    <div class="row-buttons" id="curve-presets"></div>
+    <svg id="curve-edit" class="curve-edit" viewBox="0 0 400 180" role="img" aria-label="Rate of climb curve"></svg>
+    <p class="small muted">Path from the start to the target:</p>
+    <svg id="curve-path" class="curve-preview" viewBox="0 0 400 80" aria-hidden="true"></svg>
+    <p class="small" id="curve-text"></p>
+    <div class="row-buttons">
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="ok">Use curve</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="at-start-dialog" aria-labelledby="at-start-title">
   <form method="dialog">
     <h2 id="at-start-title">Start autotune</h2>
@@ -426,6 +444,7 @@
 <script src="roast.js"></script>
 <script src="library.js"></script>
 <script src="autotune.js"></script>
+<script src="ramp.js"></script>
 <script src="link.js"></script>
 <script src="app.js"></script>
 </body>

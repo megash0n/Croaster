@@ -104,9 +104,13 @@ when gains are re-tuned. The model has room for a second fan channel
   (a recipe ramp or a profile) the heater gets τ·slope/K from the test points
   at the current fan, limited to ±40 %. Simulated 8 °C/min ramp: mean lag
   3.5 °C without, 1.3 °C with.
-- **Rate-of-rise check.** `getAutotune` returns the saved model (`saved`) so
-  the recipe editor can warn when a ramp asks for more than the heater can
-  deliver.
+- **Rate-of-rise check.** `getAutotune` returns the saved model (`saved`).
+  The recipe editor (`web/ramp.js`, D31) takes each setpoint ramp's steepest
+  rate, (to − from)/T · 60 · peak factor of its shape, and compares it with
+  the model's maximum rate of rise at that temperature and fan with the
+  heater at the saved ceiling; a ramp above it gets a warning under the step. Simulated
+  150 → 200 °C in 5 min at fan 60 %: `back` needs 20 °C/min at 200 °C where
+  the model allows 15, and is flagged.
 
 ## Protocol
 

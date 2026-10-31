@@ -1421,6 +1421,7 @@ void runAutotuneTests();
 void runFanTests();
 void runWebSocketTests();
 void runDummyTests();
+void runRampShapeTests();
 
 int main() {
     UNITY_BEGIN();
@@ -1484,5 +1485,6 @@ int main() {
     runFanTests();       // test_autotune.cpp
     runWebSocketTests(); // test_websocket.cpp
     runDummyTests();     // test_dummy.cpp
+    runRampShapeTests(); // test_ramp_shape.cpp
     return UNITY_END();
 }

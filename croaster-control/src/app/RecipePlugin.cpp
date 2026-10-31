@@ -80,6 +80,7 @@ recipe::Inputs RecipePlugin::inputs() const {
     const Snapshot s = controller_.snapshot();
     in.trip = s.trip;
     in.setpointC = s.setpoint;
+    in.heaterPct = s.heaterPct;
     if (!app_)
         return in;
     CroasterCore& core = app_->core();

@@ -145,6 +145,14 @@ test('the page sends commands only from user actions', () => {
   assert.deepEqual(sent, ['getArtisanData', 'getControl', 'getDeviceInfo']);
 });
 
+test('the shared modules app.js uses load before it', () => {
+  const app = read('app.js');
+  for (const [global, file] of [['Roast', 'roast.js'], ['ProfileLibrary', 'library.js'], ['Autotune', 'autotune.js'], ['RampShape', 'ramp.js']]) {
+    assert.ok(app.includes('window.' + global), file);
+    assert.ok(html.indexOf('<script src="' + file + '"></script>') >= 0 && html.indexOf(file) < html.indexOf('app.js'), file);
+  }
+});
+
 test('theme.js loads in <head>, before first paint and before app.js', () => {
   const head = html.slice(0, html.indexOf('</head>'));
   assert.match(head, /<script src="theme\.js"><\/script>/);

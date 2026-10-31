@@ -178,6 +178,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: var(--gap); }
 .chart .bt { stroke: var(--bt); } .chart .et { stroke: var(--et); } .chart .ror { stroke: var(--ror); }
 .chart .ror-et { stroke: var(--ror-et); stroke-dasharray: 4 4; opacity: .8; }
 .chart .sv { stroke: var(--sv); stroke-dasharray: 2 5; opacity: .8; }
+.chart .sv-plan { stroke: var(--sv); stroke-dasharray: 6 6; opacity: .45; }
 .chart path, .strips path { fill: none; stroke-width: var(--line-width); stroke-linejoin: round; }
 .chart path.bt { filter: drop-shadow(0 0 calc(3px * var(--glow)) color-mix(in srgb, var(--bt) calc(var(--glow) * 70%), transparent)); }
 .strips .heat { stroke: var(--heat); } .strips .fan { stroke: var(--fan); }
@@ -242,6 +243,20 @@ main { min-width: 0; display: flex; flex-direction: column; gap: var(--gap); }
   .recipe-table td.row-buttons { grid-column: 2; }
   .recipe-table .act { flex-wrap: wrap; }
 }
+.ramp-shape { display: inline-flex; gap: 4px; align-items: center; }
+.ramp-spark { width: 48px; height: 20px; flex: none; }
+.ramp-spark path { fill: none; stroke: var(--sv); stroke-width: 1.5; }
+.ramp-warn { margin: 0; color: var(--warn); max-width: 40em; }
+#curve-dialog { width: min(412px, calc(100vw - 24px)); box-sizing: border-box; }
+#curve-dialog h2 { margin-top: 0; }
+.curve-edit, .curve-preview { width: 100%; display: block; background: var(--panel-2); border-radius: var(--radius-sm); }
+.curve-edit { height: auto; aspect-ratio: 400 / 180; touch-action: none; cursor: crosshair; }
+.curve-preview { height: auto; aspect-ratio: 400 / 80; }
+.curve-edit text, .curve-preview text { fill: var(--muted); font: 0.7rem var(--num-font); }
+.curve-edit .grid, .curve-preview .grid { stroke: var(--grid); stroke-width: 1; }
+.curve-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.curve-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.curve-path { fill: none; stroke: var(--sv); stroke-width: 2; }
 .recipe-live { padding: var(--card-pad); margin-top: var(--gap); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .recipe-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .recipe-head h3 { margin: 0; }

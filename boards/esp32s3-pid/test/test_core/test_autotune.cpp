@@ -17,6 +17,7 @@
 #include "core/fan_assist.h"
 #include "core/roaster_model.h"
 #include "core/pid.h"
+#include "core/recipe.h"
 
 using namespace autotune;
 
@@ -828,6 +829,95 @@ void test_ramp_feedforward_and_max_ror() {
     TEST_ASSERT_TRUE(std::isnan(roastermodel::maxRorCpm(roastermodel::RoasterModel{}, 150, 60, 100)));
 }
 
+// Shaped setpoint ramps on the drum, driven by the recipe runner (setpoint
+// every 0.5 s) with fan and ramp feedforward as the controller adds them: BT
+// follows the shape of the rate of climb, not only the end points.
+void test_shaped_ramps_on_drum() {
+    const Report& r = fanReport();
+    const roastermodel::RoasterModel m = roastermodel::fromReport(r, 60);
+    const char* shapes[] = {"linear", "normal", "front", "back"};
+    char msg[200];
+    for (const char* shape : shapes) {
+        char text[300];
+        snprintf(text, sizeof text,
+                 R"({"steps":[{"trigger":{"type":"event","value":"CHARGE"},"actions":[{"type":"setpoint","value":200,"ramp":300,"shape":"%s"}]}]})",
+                 shape);
+        JsonDocument d;
+        deserializeJson(d, text);
+        static recipe::Recipe rec;
+        TEST_ASSERT_EQUAL_STRING("", recipe::parse(d.as<JsonObjectConst>(), 'C', rec));
+        recipe::Runner run;
+        recipe::RoastClock clock;
+        run.load(rec);
+        Drum q;
+        q.fan = 60;
+        Pid::Config pc;
+        Pid pid(pc);
+        pid.setGains(r.recommended);
+        roastermodel::SetpointSlope slope;
+        float pv = 25, sp = 150, lagMax = 0, lagSum = 0, over = 0, atHalf = NAN, at0 = NAN, atEnd = NAN;
+        int n = 0;
+        for (float tt = 0; tt < 1500; tt += 0.25f) {
+            const uint32_t ms = static_cast<uint32_t>(tt * 1000);
+            if (tt == 899.5f) // settled at 150 C: start the recipe, then CHARGE
+                run.start();
+            if (tt == 900)
+                clock.mark(recipe::Event::Charge, ms);
+            if (tt >= 899.5f) {
+                recipe::Inputs in;
+                in.nowMs = ms;
+                in.btC = pv;
+                in.setpointC = sp;
+                in.heaterPct = 50;
+                recipe::Output o;
+                run.tick(in, clock, o);
+                for (size_t i = 0; i < o.count; i++)
+                    if (o.commands[i].kind == Command::Kind::SetSetpoint)
+                        sp = o.commands[i].a;
+            }
+            const float ff = roastermodel::rampFeedforward(m, sp, 60, slope.update(sp, 0.25f)) +
+                             roastermodel::fanFeedforward(m, 60, sp);
+            pv = q.step(pid.update(sp, pv, ff));
+            if (tt >= 900 && tt < 1200) {
+                lagMax = std::max(lagMax, std::fabs(sp - pv));
+                lagSum += (sp - pv) * (sp - pv);
+                n++;
+            }
+            if (tt == 900)
+                at0 = pv;
+            if (tt == 1050)
+                atHalf = pv;
+            if (tt == 1200)
+                atEnd = pv;
+            if (tt > 1200)
+                over = std::max(over, pv - 200);
+        }
+        const float firstHalf = (atHalf - at0) / 2.5f, secondHalf = (atEnd - atHalf) / 2.5f; // C/min
+        float uPeak = 0;
+        const uint8_t* rates = recipe::shapeRates(rec.steps[0].actions[0].shape);
+        const float need = 50.0f / 5 * recipe::peakFactor(rates, &uPeak);
+        const float peakC = 150 + 50 * recipe::rampFraction(rates, uPeak);
+        snprintf(msg, sizeof msg,
+                 "%-6s 150->200 C in 5 min: BT RoR %.1f then %.1f C/min (path %.1f / %.1f), lag rms %.2f max %.2f C, "
+                 "overshoot %.2f C; peak need %.0f C/min at %.0f C, model max %.0f",
+                 shape, firstHalf, secondHalf, 50 * recipe::rampFraction(rates, 0.5f) / 2.5f,
+                 50 * (1 - recipe::rampFraction(rates, 0.5f)) / 2.5f, std::sqrt(lagSum / n), lagMax, over, need, peakC,
+                 roastermodel::maxRorCpm(m, peakC, 60, 90));
+        TEST_MESSAGE(msg);
+        TEST_ASSERT_TRUE(run.state() == recipe::State::Done);
+        TEST_ASSERT_FLOAT_WITHIN(2.0f, 200, pv);
+        TEST_ASSERT_TRUE(lagMax < 10); // dead time and probe lag: the steep start of "front" lags most
+        // "back" ends at its fastest rate: BT carries that momentum past the target.
+        TEST_ASSERT_TRUE(over < (std::strcmp(shape, "back") ? 2.5f : 6.0f));
+        if (!std::strcmp(shape, "front"))
+            TEST_ASSERT_TRUE(firstHalf > 2 * secondHalf);
+        if (!std::strcmp(shape, "back"))
+            TEST_ASSERT_TRUE(secondHalf > 2 * firstHalf);
+        if (!std::strcmp(shape, "linear"))
+            TEST_ASSERT_FLOAT_WITHIN(0.35f * firstHalf, firstHalf, secondHalf);
+    }
+}
+
 // Fan assist: bounded, rate-limited, never below the base fan, never in
 // Manual (stop, cooldown) or during a trip, and off unless enabled.
 void test_fan_assist_bounds() {
@@ -1084,6 +1174,7 @@ void runFanTests() {
     RUN_TEST(test_at_fan_test_failure_keeps_gains);
     RUN_TEST(test_fan_feedforward_dip);
     RUN_TEST(test_ramp_feedforward_and_max_ror);
+    RUN_TEST(test_shaped_ramps_on_drum);
     RUN_TEST(test_fan_assist_bounds);
     RUN_TEST(test_pid_feedforward);
 }

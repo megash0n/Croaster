@@ -7,6 +7,7 @@
   const TH = window.Theme;
   const P = window.ProfileLibrary;
   const A = window.Autotune;
+  const RS = window.RampShape;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -72,6 +73,9 @@
     lib: { state: 'unknown', list: [], askedAt: 0, used: null, total: null, max: null, base: null, imported: null, getIntent: {} },
     recipeRows: (loadJson(KEY_RECIPE) || {}).rows || [],
     recipeMode: (loadJson(KEY_RECIPE) || {}).mode === 'guided' ? 'guided' : 'auto',
+    recipeCharge: (loadJson(KEY_RECIPE) || {}).charge || '', // charge temperature as typed, page unit
+    recipeAt: 0, // Date.now() of the last getRecipe reply (ramp elapsed is as of then)
+    rampWarn: [], // [{i, k, node}] ramp feasibility notes in the recipe editor
     recipe: null, recipeSeq: null, // the board's getRecipe reply and the data "recipe.seq" it matches
     behind: { state: null, warn: false, lagC: NaN },
   };
@@ -546,6 +550,24 @@
   }
 
   // ---------- chart ----------
+  // The rest of a running setpoint ramp, [{t (session s), v (session unit)}]: drawn dashed ahead of SV.
+  function setpointPlan() {
+    const rec = S.recipe;
+    if (!recording() || !rec || rec.state !== 'running') return [];
+    const n = rampNow(rec);
+    if (!n || n.rp.kind !== 'setpoint' || n.elapsed >= n.rp.duration) return [];
+    const ses = S.session;
+    const now = (Date.now() - ses.startedAt) / 1000;
+    const u0 = n.elapsed / n.rp.duration, out = [];
+    const u = ses.unit || 'C';
+    for (let i = 0; i <= 30; i++) {
+      const uu = u0 + (1 - u0) * i / 30;
+      const c = n.rp.from + (n.rp.to - n.rp.from) * RS.fraction(n.rates, uu);
+      out.push({ t: now + (uu - u0) * n.rp.duration, v: P.convert(c, 'C', u) });
+    }
+    return out;
+  }
+
   function renderChart() {
     const svg = $('#chart');
     const W = svg.clientWidth, H = svg.clientHeight;
@@ -557,7 +579,8 @@
     let xMin = ss.length ? ss[0].t - t0 : 0;
     if (charge !== null) xMin = Math.max(xMin, -180); // keep at most 3 min of preheat in view
     const xLast = ss.length ? ss[ss.length - 1].t - t0 : 0;
-    const xMax = Math.max(xLast, xMin + (charge !== null ? 720 : 300));
+    const plan = setpointPlan();
+    const xMax = Math.max(xLast, xMin + (charge !== null ? 720 : 300), plan.length ? plan[plan.length - 1].t - t0 : 0);
     const xTicks = R.niceTicks(xMin / 60, xMax / 60, Math.max(3, Math.floor(W / 90)));
     const x = (t) => M.l + ((t - t0) - xMin) / (xMax - xMin) * (W - M.l - M.r);
 
@@ -568,6 +591,7 @@
     for (const s of vis) {
       for (const v of [s.bt, s.et, s.sv, s.at]) if (isNum(v)) { tLo = Math.min(tLo, v); tHi = Math.max(tHi, v); }
     }
+    for (const p of plan) { tLo = Math.min(tLo, p.v); tHi = Math.max(tHi, p.v); }
     const first = ss.length - vis.length;
     for (let i = first; i < ss.length; i++) {
       const r = rorAt(i);
@@ -614,6 +638,7 @@
       if (d) svg.append(svgEl('path', { class: cls, d }));
     };
     line('sv', (i) => ss[i].sv, yt);
+    if (plan.length) svg.append(svgEl('path', { class: 'sv-plan', d: plan.map((p, n) => (n ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + yt(p.v).toFixed(1)).join('') }));
     line('at-target', (i) => ss[i].at, yt);
     line('et', (i) => ss[i].et, yt);
     line('bt', (i) => ss[i].bt, yt);
@@ -877,7 +902,7 @@
   function editorProfile() {
     const name = $('#lib-name').value;
     const rows = scheduleRows();
-    const recipe = S.recipeRows.length ? P.recipeFromEditor(S.recipeRows, S.recipeMode) : null;
+    const recipe = S.recipeRows.length ? P.recipeFromEditor(S.recipeRows, S.recipeMode, S.recipeCharge) : null;
     if (!rows && !recipe) return { error: 'empty' };
     return P.fromEditor(rows, name, $('#lib-notes').value, edUnit(), S.lib.base, recipe);
   }
@@ -898,6 +923,7 @@
     S.profile = Array.isArray(p.steps) ? P.toEditor(p, edUnit()) : [{ duration: 60, setpoint: '', interpolation: 'linear', fanValue: '' }];
     S.recipeRows = p.recipe ? P.recipeToEditor(p.recipe, p.unit, edUnit()) : [];
     S.recipeMode = p.recipe && p.recipe.mode === 'guided' ? 'guided' : 'auto';
+    S.recipeCharge = p.recipe && isNum(p.recipe.chargeTemp) ? P.convert(p.recipe.chargeTemp, p.unit, edUnit()) : '';
     S.lib.base = JSON.parse(JSON.stringify(p));
     $('#lib-name').value = p.name || '';
     $('#lib-notes').value = p.notes || '';
@@ -1022,7 +1048,7 @@
     cool: 'Cool (stop)', end: 'End recipe', note: 'Note' };
 
   function saveRecipeRows() {
-    saveJson(KEY_RECIPE, { mode: S.recipeMode, rows: S.recipeRows });
+    saveJson(KEY_RECIPE, { mode: S.recipeMode, rows: S.recipeRows, charge: S.recipeCharge });
   }
 
   function recipeStatus(text, isError) {
@@ -1035,7 +1061,10 @@
     const body = $('#recipe-table tbody');
     body.textContent = '';
     $('#recipe-mode').value = S.recipeMode;
-    const changed = () => saveRecipeRows();
+    const charge = $('#recipe-charge');
+    if (document.activeElement !== charge) charge.value = S.recipeCharge;
+    S.rampWarn = [];
+    const changed = () => { saveRecipeRows(); checkRamps(); };
     const select = (options, labels, value, onChange) => {
       const s = el('select');
       for (const o of options) s.append(el('option', { value: o }, labels[o] || o));
@@ -1083,12 +1112,15 @@
       row.actions.forEach((a, k) => {
         const act = el('div', { class: 'act' });
         act.append(select(P.ACTIONS, ACTION_LABELS, a.type, (v) => { a.type = v; renderRecipe(); }));
-        if (a.type === 'power' || a.type === 'fan') {
+        if (a.type === 'fan') {
           act.append(input({ type: 'number', min: '0', max: '100', step: '1', 'aria-label': ACTION_LABELS[a.type] }, a.value, (v) => { a.value = v; }));
-        } else if (a.type === 'setpoint') {
-          act.append(input({ type: 'number', step: 'any', 'aria-label': 'Setpoint' }, a.value, (v) => { a.value = v; }));
-          act.append(el('span', { class: 'small muted' }, unitLabel() + ', ramp s'));
+        } else if (a.type === 'power' || a.type === 'setpoint') {
+          const power = a.type === 'power';
+          act.append(power ? input({ type: 'number', min: '0', max: '100', step: '1', 'aria-label': ACTION_LABELS[a.type] }, a.value, (v) => { a.value = v; }) :
+            input({ type: 'number', step: 'any', 'aria-label': 'Setpoint' }, a.value, (v) => { a.value = v; }));
+          act.append(el('span', { class: 'small muted' }, (power ? '%' : unitLabel()) + ', ramp s'));
           act.append(input({ type: 'number', min: '0', max: '3600', step: '1', placeholder: '0', 'aria-label': 'Ramp seconds' }, a.ramp, (v) => { a.ramp = v; }));
+          act.append(rampShapeControl(a, power, changed));
         } else if (a.type === 'note') {
           act.append(input({ type: 'text', class: 'note', maxlength: '80', 'aria-label': 'Note' }, a.text, (v) => { a.text = v; }));
         }
@@ -1097,6 +1129,11 @@
         rm.addEventListener('click', () => { row.actions.splice(k, 1); changed(); renderRecipe(); });
         act.append(rm);
         then.append(act);
+        if (a.type === 'setpoint') {
+          const note = el('p', { class: 'small ramp-warn', role: 'status', hidden: '' });
+          then.append(note);
+          S.rampWarn.push({ i, k, node: note });
+        }
       });
       const add = el('button', { type: 'button', class: 'ghost' }, '+ action');
       add.disabled = row.actions.length >= P.RECIPE.MAX_ACTIONS;
@@ -1126,6 +1163,130 @@
     else if ($('#recipe-status').textContent === empty) recipeStatus('');
     const lag = $('#recipe-lag');
     if (document.activeElement !== lag) lag.value = lagSetting();
+    checkRamps();
+  }
+
+  // Shape picker for a ramp: the shape list, a small preview of the path, and
+  // the curve editor for a custom shape.
+  function rampShapeControl(a, power, changed) {
+    const box = el('span', { class: 'ramp-shape' });
+    const sel = el('select', { 'aria-label': 'Ramp shape', title: 'How the rate of climb is spread over the ramp' });
+    for (const sh of RS.SHAPES) sel.append(el('option', { value: sh }, RS.LABELS[sh]));
+    sel.value = RS.SHAPES.includes(a.shape) ? a.shape : 'linear';
+    const spark = svgEl('svg', { class: 'ramp-spark', viewBox: '0 0 48 20', 'aria-hidden': 'true' });
+    const draw = () => {
+      spark.textContent = '';
+      const pts = RS.path(0, 1, 1, RS.rates(a.shape, a.curve), 24);
+      spark.append(svgEl('path', { d: pts.map((p, n) => (n ? 'L' : 'M') + (2 + p.t * 44).toFixed(1) + ' ' + (18 - p.v * 16).toFixed(1)).join('') }));
+    };
+    const edit = el('button', { type: 'button', class: 'ghost', title: 'Edit the rate-of-climb curve' }, 'Edit');
+    edit.hidden = sel.value !== 'custom';
+    const open = () => openCurveEditor(a, power, () => { sel.value = a.shape; edit.hidden = a.shape !== 'custom'; draw(); changed(); });
+    sel.addEventListener('change', () => {
+      const before = a.shape || 'linear';
+      a.shape = sel.value;
+      if (a.shape === 'custom' && !RS.validCurve(a.curve)) a.curve = RS.rates(before === 'custom' ? 'linear' : before);
+      edit.hidden = a.shape !== 'custom';
+      draw();
+      changed();
+      if (a.shape === 'custom') open();
+    });
+    edit.addEventListener('click', open);
+    draw();
+    box.append(sel, spark, edit);
+    return box;
+  }
+
+  // Touch editor for a custom ramp: 21 rates (0..100 in steps of 5) at 0, 5,
+  // ... 100 % of the ramp time, drawn by dragging; the path it gives below.
+  function openCurveEditor(a, power, done) {
+    const dlg = $('#curve-dialog');
+    let rates = RS.rates('custom', a.curve);
+    const svg = $('#curve-edit');
+    const prev = $('#curve-path');
+    const W = 400, H = 180, M = { l: 30, r: 10, t: 10, b: 20 };
+    const px = (i) => M.l + i / (RS.POINTS - 1) * (W - M.l - M.r);
+    const py = (v) => H - M.b - v / 100 * (H - M.t - M.b);
+    const to = Number(a.value);
+    const seconds = Number(a.ramp) > 0 ? Number(a.ramp) : 0;
+    const draw = () => {
+      svg.textContent = '';
+      for (const v of [0, 50, 100]) {
+        svg.append(svgEl('line', { class: 'grid', x1: M.l, x2: W - M.r, y1: py(v), y2: py(v) }));
+        const tx = svgEl('text', { x: M.l - 4, y: py(v) + 4, 'text-anchor': 'end' });
+        tx.textContent = v;
+        svg.append(tx);
+      }
+      for (const f of [0, 0.5, 1]) {
+        const tx = svgEl('text', { x: px(f * (RS.POINTS - 1)), y: H - 4, 'text-anchor': f === 0 ? 'start' : f === 1 ? 'end' : 'middle' });
+        tx.textContent = seconds ? P.clock(f * seconds) : Math.round(f * 100) + ' %';
+        svg.append(tx);
+      }
+      svg.append(svgEl('path', { class: 'curve-line', d: rates.map((v, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(v).toFixed(1)).join('') }));
+      rates.forEach((v, i) => svg.append(svgEl('circle', { class: 'curve-dot', cx: px(i), cy: py(v), r: 5 })));
+      // Path preview, start to target: the start is the heater or setpoint when the step fires.
+      prev.textContent = '';
+      const pts = RS.path(0, 1, 1, rates, 40);
+      prev.append(svgEl('line', { class: 'grid', x1: M.l, x2: W - M.r, y1: 70, y2: 70 }));
+      prev.append(svgEl('line', { class: 'grid', x1: M.l, x2: W - M.r, y1: 10, y2: 10 }));
+      prev.append(svgEl('path', { class: 'curve-path', d: pts.map((p, n) => (n ? 'L' : 'M') + (M.l + p.t * (W - M.l - M.r)).toFixed(1) + ' ' + (70 - p.v * 60).toFixed(1)).join('') }));
+      const lo = svgEl('text', { x: M.l - 4, y: 74, 'text-anchor': 'end' });
+      lo.textContent = power ? 'now' : 'start';
+      const hi = svgEl('text', { x: M.l - 4, y: 14, 'text-anchor': 'end' });
+      hi.textContent = isNum(to) && String(a.value).trim() !== '' ? to + (power ? ' %' : ' ' + unitLabel()) : 'target';
+      prev.append(lo, hi);
+      const pk = RS.peak(rates);
+      $('#curve-text').textContent = 'Steepest at ' + Math.round(pk.at * 100) + ' % of the ramp, ' + pk.factor.toFixed(1) +
+        '\u00d7 a linear ramp.';
+    };
+    const setAt = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const x = (ev.clientX - r.left) / r.width * W, y = (ev.clientY - r.top) / r.height * H;
+      const i = Math.max(0, Math.min(RS.POINTS - 1, Math.round((x - M.l) / (W - M.l - M.r) * (RS.POINTS - 1))));
+      const v = RS.snap((H - M.b - y) / (H - M.t - M.b) * 100);
+      // A fast drag skips points: fill the ones between in a straight line.
+      const j = last === null ? i : last, lo = Math.min(i, j), hi = Math.max(i, j);
+      const vj = last === null ? v : rates[j];
+      for (let n = lo; n <= hi; n++) rates[n] = hi === lo ? v : RS.snap(vj + (v - vj) * (n - j) / (i - j));
+      last = i;
+      draw();
+    };
+    let drag = false, last = null;
+    svg.onpointerdown = (ev) => { drag = true; last = null; svg.setPointerCapture(ev.pointerId); setAt(ev); ev.preventDefault(); };
+    svg.onpointermove = (ev) => { if (drag) setAt(ev); };
+    svg.onpointerup = svg.onpointercancel = () => { drag = false; };
+    const presets = $('#curve-presets');
+    presets.textContent = '';
+    for (const sh of ['linear', 'normal', 'front', 'back']) {
+      const b = el('button', { type: 'button', class: 'ghost', title: RS.HINTS[sh] }, RS.LABELS[sh]);
+      b.addEventListener('click', () => { rates = RS.rates(sh); draw(); });
+      presets.append(b);
+    }
+    $('#curve-title').textContent = (power ? 'Heater' : 'Setpoint') + ' ramp shape';
+    draw();
+    dlg.onclose = () => {
+      if (dlg.returnValue !== 'ok') return;
+      if (!rates.some((v) => v > 0)) rates = RS.rates('linear');
+      a.shape = 'custom';
+      a.curve = rates.slice();
+      done();
+    };
+    dlg.returnValue = '';
+    dlg.showModal();
+  }
+
+  // Feasibility notes under setpoint ramps, from the saved autotune model.
+  function checkRamps() {
+    if (!S.rampWarn.length) return;
+    const saved = S.at && S.at.saved;
+    const u = edUnit();
+    const recipe = P.recipeFromEditor(S.recipeRows, S.recipeMode, S.recipeCharge);
+    const found = saved ? RS.checkRecipe(recipe, u, saved, S.at.unit || u) : [];
+    for (const w of S.rampWarn) {
+      const hit = found.find((f) => f.step === w.i && f.action === w.k);
+      w.node.hidden = !hit;
+      w.node.textContent = hit ? RS.checkText(hit, u) : '';
+    }
   }
 
   // "step 3: " for the first recipe row the board would refuse, so the message points at it.
@@ -1141,7 +1302,7 @@
   function loadRecipe() {
     if (!S.recipeRows.length) { recipeStatus('Add a step first.', true); return; }
     const name = $('#lib-name').value.trim() || 'Recipe';
-    const res = P.fromEditor(null, name, '', edUnit(), null, P.recipeFromEditor(S.recipeRows, S.recipeMode));
+    const res = P.fromEditor(null, name, '', edUnit(), null, P.recipeFromEditor(S.recipeRows, S.recipeMode, S.recipeCharge));
     if (res.error) { recipeStatus('Not sent: ' + stepHint(res.reason) + (res.reason || P.message(res.error)) + '.', true); return; }
     send({ command: 'recipeLoad', profile: res.profile });
     recipeStatus('Sent ' + S.recipeRows.length + ' steps, waiting for the board…');
@@ -1156,6 +1317,7 @@
   function onRecipe(cmd, r) {
     if (cmd === 'getRecipe') {
       S.recipe = r;
+      S.recipeAt = Date.now();
     } else if (cmd === 'recipeLoad') {
       if (r.ok) recipeStatus('Loaded on the board' + (r.schedule ? ', with its schedule' : '') + '. Run recipe starts it.');
       else recipeStatus('Not loaded: ' + (r.reason || P.message(r.error)) + '.', true);
@@ -1195,6 +1357,23 @@
     return head + ':' + step.slice(step.indexOf(':') + 1) + (f.how === 'prompted' ? ' (waiting)' : f.how === 'confirmed' ? ' (set)' : '');
   }
 
+  // The ramp in progress, from getRecipe "ramp" (setpoint values in C).
+  function rampNow(rec) {
+    const rp = rec && rec.ramp;
+    if (!rp || !isNum(rp.duration) || !(rp.duration > 0)) return null;
+    const elapsed = Math.min(rp.duration, (isNum(rp.elapsed) ? rp.elapsed : 0) + (Date.now() - S.recipeAt) / 1000);
+    return { rp, elapsed, rates: Array.isArray(rp.rates) && rp.rates.length === RS.POINTS ? rp.rates : RS.rates('linear') };
+  }
+  function rampLiveText(rec) {
+    const n = rampNow(rec);
+    if (!n) return '';
+    const u = edUnit();
+    const v = (x) => (n.rp.kind === 'power' ? Math.round(x) + ' %' : Math.round(P.convert(x, 'C', u)) + ' ' + unitLabel());
+    const shape = RS.SHAPES.find((sh) => sh !== 'custom' && RS.PRESETS[sh].join() === n.rates.join()) || 'custom';
+    return (n.rp.kind === 'power' ? 'Heater' : 'Setpoint') + ' ramp ' + v(n.rp.from) + ' \u2192 ' + v(n.rp.to) + ', ' +
+      RS.LABELS[shape].toLowerCase() + ', ' + P.clock(n.elapsed) + ' of ' + P.clock(n.rp.duration) + '.';
+  }
+
   function renderRecipeLive() {
     const box = $('#recipe-live');
     const rec = S.recipe;
@@ -1217,6 +1396,7 @@
     const prompt = $('#rl-prompt');
     prompt.hidden = !(running && rec.prompt >= 0);
     if (!prompt.hidden) $('#rl-prompt-text').textContent = P.describeStep(rec.recipe, rec.prompt, rec.unit, u);
+    $('#rl-ramp').textContent = running ? rampLiveText(rec) : '';
     const list = $('#rl-fired');
     list.textContent = '';
     for (const f of (rec.fired || []).slice().reverse()) list.append(el('li', { class: f.how }, firedText(rec, f)));
@@ -1240,6 +1420,7 @@
   function onAutotune(cmd, r) {
     if (cmd === 'getAutotune') {
       S.at = r;
+      checkRamps();
       const key = r.pending && r.recommended ? JSON.stringify(r.recommended) + (r.results || []).length : null;
       // Pending results open the dialog once per page load, including after a reload.
       if (key && key !== S.atShownFor) { S.atShownFor = key; showAutotuneDialog(); }
@@ -1658,6 +1839,7 @@
 
     // Recipe
     $('#recipe-mode').addEventListener('change', (e) => { S.recipeMode = e.target.value; saveRecipeRows(); });
+    $('#recipe-charge').addEventListener('input', (e) => { S.recipeCharge = e.target.value; saveRecipeRows(); checkRamps(); });
     $('#recipe-lag').addEventListener('change', (e) => {
       const v = Number(e.target.value);
       if (v > 0 && v <= 50) localStorage.setItem(KEY_LAG + '.' + edUnit(), String(v));

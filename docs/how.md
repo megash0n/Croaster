@@ -182,7 +182,11 @@ inputs (BT, ET, RoR in °C from the corrected readings, the setpoint, the
 roast clock) and ticks the runner. The runner returns controller commands
 (`SetMode`, `SetHeater`, `SetFan`, `SetSetpoint`) and a stop flag; the plugin
 submits them through `Controller::submit`, so every interlock applies. A
-setpoint ramp is a stream of `SetSetpoint` every 500 ms. `ControlPlugin`
+setpoint ramp is a stream of `SetSetpoint` every 500 ms along the ramp's
+shape: the 21-point rate-of-climb curve gives progress F(t/T)
+(`recipe::rampFraction`). A power ramp is the same stream of `SetHeater`
+from the heater % at the step. `chargeTemp` sends PID and its setpoint once
+on the first tick after Start. `ControlPlugin`
 calls the plugin's stop hook on `stop`, Stop and emergency off, which aborts
 the recipe; a trip is seen in the inputs and aborts it on the next tick;
 OTA aborts it in `loop()`. Event triggers and time since CHARGE come from

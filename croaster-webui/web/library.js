@@ -22,7 +22,8 @@
   const UNITS = ['C', 'F', 'K'];
   // Recipe limits, as core/recipe.h.
   const RECIPE = { MAX_STEPS: 32, MAX_ACTIONS: 4, MAX_NOTE: 80, MAX_LABEL: 40, MAX_TIME_S: 3600,
-    MIN_TEMP_C: 0, MAX_TEMP_C: 350, MIN_ROR_C: -50, MAX_ROR_C: 100, MAX_RAMP_S: 3600 };
+    MIN_TEMP_C: 0, MAX_TEMP_C: 350, MIN_ROR_C: -50, MAX_ROR_C: 100, MAX_RAMP_S: 3600, CURVE_POINTS: 21, MAX_CURVES: 8 };
+  const SHAPES = ['linear', 'normal', 'front', 'back', 'custom'];
   const EVENTS = ['CHARGE', 'TP', 'DRY_END', 'FC_START', 'FC_END', 'SC_START', 'SC_END', 'DROP'];
   const TRIGGERS = ['time', 'bt', 'et', 'ror', 'event'];
   const OPS = ['gte', 'lte', 'near'];
@@ -121,16 +122,30 @@
     return '';
   }
 
+  // "ramp", "shape" and "curve" of a power or setpoint action.
+  function rampReason(a) {
+    if (present(a.ramp) && !(isNum(a.ramp) && a.ramp >= 0 && a.ramp <= RECIPE.MAX_RAMP_S)) return 'ramp must be 0..3600 s';
+    const shape = present(a.shape) ? a.shape : 'linear';
+    if (!SHAPES.includes(shape)) return 'shape must be linear, normal, front, back or custom';
+    if (shape !== 'custom') return present(a.curve) ? 'curve needs shape custom' : '';
+    if (!Array.isArray(a.curve) || a.curve.length !== RECIPE.CURVE_POINTS) return 'curve must have 21 rates';
+    if (!a.curve.every((v) => isNum(v) && v >= 0 && v <= 100)) return 'curve rates must be 0..100';
+    if (!a.curve.some((v) => Math.round(v) > 0)) return 'curve needs a rate above 0';
+    return '';
+  }
+
   function actionReason(a, unit) {
     if (!isObj(a)) return 'action must be an object';
-    if (a.type === 'power' || a.type === 'fan')
-      return isNum(a.value) && a.value >= 0 && a.value <= 100 ? '' : 'power and fan must be 0..100 %';
+    if (a.type === 'power' || a.type === 'fan') {
+      if (!(isNum(a.value) && a.value >= 0 && a.value <= 100)) return 'power and fan must be 0..100 %';
+      if (a.type === 'fan') return present(a.ramp) || present(a.shape) ? 'fan does not ramp' : '';
+      return rampReason(a);
+    }
     if (a.type === 'setpoint') {
       if (!isNum(a.value)) return 'setpoint value missing';
       const c = toCelsius(a.value, unit);
       if (!(c >= RECIPE.MIN_TEMP_C && c <= RECIPE.MAX_TEMP_C)) return 'setpoint must be 0..350 C';
-      if (present(a.ramp) && !(isNum(a.ramp) && a.ramp >= 0 && a.ramp <= RECIPE.MAX_RAMP_S)) return 'ramp must be 0..3600 s';
-      return '';
+      return rampReason(a);
     }
     if (a.type === 'hold' || a.type === 'cool' || a.type === 'end') return '';
     if (a.type === 'note')
@@ -144,7 +159,13 @@
     if (!isObj(r)) return 'recipe must be an object';
     const mode = present(r.mode) ? r.mode : 'auto';
     if (mode !== 'auto' && mode !== 'guided') return 'mode must be auto or guided';
+    if (present(r.chargeTemp)) {
+      if (!isNum(r.chargeTemp)) return 'chargeTemp must be a number';
+      const c = toCelsius(r.chargeTemp, unit);
+      if (!(c >= RECIPE.MIN_TEMP_C && c <= RECIPE.MAX_TEMP_C)) return 'chargeTemp must be 0..350 C';
+    }
     if (!Array.isArray(r.steps) || r.steps.length < 1 || r.steps.length > RECIPE.MAX_STEPS) return 'a recipe has 1 to 32 steps';
+    let curves = 0;
     for (const s of r.steps) {
       if (!isObj(s)) return 'step must be an object';
       let e = triggerReason(s.trigger, unit);
@@ -155,6 +176,7 @@
       for (const a of s.actions) {
         e = actionReason(a, unit);
         if (e) return e;
+        if (a.shape === 'custom' && ++curves > RECIPE.MAX_CURVES) return 'a recipe has up to 8 custom curves';
       }
     }
     return '';
@@ -232,11 +254,11 @@
   }
 
   // Recipe JSON from editor rows (values as typed, in the page unit). Blank
-  // fields become NaN so validation names them.
-  function recipeFromEditor(rows, mode) {
-    return {
-      mode: mode === 'guided' ? 'guided' : 'auto',
-      steps: rows.map((r) => {
+  // fields become NaN so validation names them. `chargeTemp` blank leaves it out.
+  function recipeFromEditor(rows, mode, chargeTemp) {
+    const out = { mode: mode === 'guided' ? 'guided' : 'auto' };
+    if (!blank(chargeTemp)) out.chargeTemp = num(chargeTemp);
+    out.steps = rows.map((r) => {
         const trigger = { type: r.type, op: r.op || 'gte' };
         trigger.value = r.type === 'event' ? r.event : r.type === 'time' ? parseClock(r.value) : num(r.value);
         if (r.type !== 'event' && trigger.op === 'near' && !blank(r.tol)) trigger.tol = num(r.tol);
@@ -246,13 +268,17 @@
         step.actions = r.actions.map((a) => {
           const out = { type: a.type };
           if (a.type === 'power' || a.type === 'fan' || a.type === 'setpoint') out.value = num(a.value);
-          if (a.type === 'setpoint' && !blank(a.ramp) && Number(a.ramp) > 0) out.ramp = num(a.ramp);
+          if ((a.type === 'setpoint' || a.type === 'power') && !blank(a.ramp) && Number(a.ramp) > 0) {
+            out.ramp = num(a.ramp);
+            if (a.shape && a.shape !== 'linear') out.shape = a.shape;
+            if (a.shape === 'custom') out.curve = Array.isArray(a.curve) ? a.curve.slice() : [];
+          }
           if (a.type === 'note') out.text = String(a.text || '');
           return out;
         });
         return step;
-      }),
-    };
+      });
+    return out;
   }
 
   // Editor rows from a recipe written in `from`, temperatures shown in `to`.
@@ -267,7 +293,8 @@
       if (isNum(t.tol)) row.tol = t.type === 'time' ? t.tol : convertDelta(t.tol, from, to);
       row.actions = (s.actions || []).map((a) => ({ type: a.type,
         value: a.type === 'setpoint' ? convert(a.value, from, to) : isNum(a.value) ? a.value : '',
-        ramp: isNum(a.ramp) ? a.ramp : '', text: a.text || '' }));
+        ramp: isNum(a.ramp) ? a.ramp : '', shape: a.shape || 'linear',
+        curve: Array.isArray(a.curve) ? a.curve.slice() : undefined, text: a.text || '' }));
       return row;
     });
   }
@@ -292,12 +319,17 @@
     if (t.type === 'ror') return 'RoR ' + op + ' ' + convertDelta(t.value, from, to) + ' \u00b0' + to + '/min';
     return t.type.toUpperCase() + ' ' + op + ' ' + convert(t.value, from, to) + ' \u00b0' + to;
   }
+  // " over 2:00" or " over 2:00, front"
+  function rampText(a) {
+    if (!(isNum(a.ramp) && a.ramp > 0)) return '';
+    return ' over ' + clock(a.ramp) + (a.shape && a.shape !== 'linear' ? ', ' + a.shape : '');
+  }
   function describeAction(a, from, to) {
     switch (a.type) {
-      case 'power': return 'power ' + a.value + ' %';
+      case 'power': return 'power ' + a.value + ' %' + rampText(a);
       case 'fan': return 'fan ' + a.value + ' %';
       case 'setpoint':
-        return 'setpoint ' + convert(a.value, from, to) + ' \u00b0' + to + (isNum(a.ramp) && a.ramp > 0 ? ' over ' + clock(a.ramp) : '');
+        return 'setpoint ' + convert(a.value, from, to) + ' \u00b0' + to + rampText(a);
       case 'hold': return 'hold';
       case 'cool': return 'cool';
       case 'end': return 'end recipe';
@@ -365,6 +397,6 @@
 
   return { VERSION, MAX_PROFILES, MAX_BYTES, MAX_NAME, MAX_NOTES, MAX_STEPS, RECIPE, EVENTS, EVENT_LABELS,
     TRIGGERS, OPS, ACTIONS, validate, recipeReason, parseFile, fromEditor, toEditor, newRecipeRow,
-    recipeFromEditor, recipeToEditor, parseClock, describeTrigger, describeStep, behindSchedule, clock, convert, convertDelta,
+    SHAPES, recipeFromEditor, recipeToEditor, parseClock, describeTrigger, describeStep, behindSchedule, clock, convert, convertDelta,
     toCelsius, fileName, busyReason, findByName, message };
 });
