@@ -2,6 +2,7 @@
 
 Plain-language tour of `rework/roaster`, written with the `/how` method:
 overview, key ideas, the flow step by step, where things live, gotchas.
+For using the roaster rather than the code, see [user-guide.md](user-guide.md).
 
 ## Overview
 

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **User guide** (`docs/user-guide.md`): operating Croaster PID on the
+  Behmor 2000AB: modes, the web page and roast flow, autotune and the fan
+  test, fan assist, recipes, ramp shapes with a worked example, safety trips,
+  cooldown and units, with the roasting reasons for each.
 - **Recipe ramp shapes (D31, T63).** Setpoint and power ramps take `shape`
   (`linear`, `normal`, `front`, `back`, `custom` with a 21-point `curve`):
   the curve is the rate of climb over the ramp, so `front` gives a declining
