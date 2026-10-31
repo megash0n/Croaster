@@ -13,6 +13,7 @@ Design decision: D29 in `docs/design.md`. Ticket: T57 in `docs/tickets.md`.
 |---|---|
 | [process.md](process.md) | What a run does, phase by phase, with the state diagram, the safety stops and how long it takes |
 | [tuning-rules.md](tuning-rules.md) | The method, the tuning rules compared on a simulated drum, and why the default is Ziegler–Nichols PI |
+| [fan-test.md](fan-test.md) | The optional fan test: how airflow removes heat, what it measures, and how fan feedforward and fan assist use it |
 | [implementation.md](implementation.md) | Code layout, protocol, settings, page, tests and build sizes |
 
 ## Goal
@@ -46,8 +47,10 @@ Design decision: D29 in `docs/design.md`. Ticket: T57 in `docs/tickets.md`.
    before starting, because a fan change during the run stops it (D23).
    Start with the roaster cold or cooled: BT must be under the first test
    point plus 30 °C (about 300 °F) or the run refuses to start.
-2. Controls > Autotune > **Start autotune**. The confirm says what will happen
-   and about how long it takes. Nothing starts until OK.
+2. Controls > Autotune > **Start autotune**. The dialog says what will happen
+   and about how long it takes, with the **Fan test** checkbox (on by
+   default; it adds about 30 minutes, see [fan-test.md](fan-test.md)).
+   Nothing starts until Start.
 3. Watch the step list and the log. STOP, Heater off or Stop autotune end the
    run at any time; the heater turns off and the gains stay as they were.
 4. When it finishes, a dialog shows each point's result and the current

@@ -40,8 +40,8 @@ void ControlPlugin::attach(CroasterApp& app, const ControlSettings& settings) {
     }
     for (size_t i = 0; i < controlproto::kBasicNameCount; i++) {
         const char* name = controlproto::kBasicNames[i];
-        app.commands().onCommand(name, [this, name](const JsonObject&) {
-            return handleBasic(name);
+        app.commands().onCommand(name, [this, name](const JsonObject& json) {
+            return handleBasic(name, json);
         });
     }
     for (size_t i = 0; i < controlproto::kLegacyBasicNameCount; i++) {
@@ -122,11 +122,15 @@ void ControlPlugin::apply(const controlproto::Parsed& p) {
         ConfigStore::saveWatchdog(settings_.watchdog);
         watchdogArmedMs_ = millis();
     }
+    if (p.hasFanAssist) {
+        settings_.fanAssist = p.fanAssist;
+        ConfigStore::saveFanAssist(p.fanAssist);
+    }
 }
 
-String ControlPlugin::handleBasic(const char* name) {
+String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
     Command c;
-    if (controlproto::basicCommand(name, c)) {
+    if (controlproto::basicCommand(name, c, json)) {
         if (c.kind == Command::Kind::Stop) {
             stop();
             if (stopListener_)
@@ -146,6 +150,7 @@ String ControlPlugin::handleBasic(const char* name) {
     JsonDocument doc; // getControl
     JsonObject r = beginReply(doc, name);
     controlproto::writeControlInfo(controller_.snapshot(), settings_.cooldownFan, settings_.watchdog, unit(), r);
+    r["fanAssist"]["max"] = settings_.fanAssistMaxPct;
     // Smallest free loop task stack since boot, in bytes (ESP-IDF counts bytes).
     r["loopStackFree"] = uxTaskGetStackHighWaterMark(nullptr);
     return finishReply(doc);
@@ -170,6 +175,11 @@ void ControlPlugin::loop() {
         autotuneSeq_ = s.autotuneSeq;
         settings_.gains = s.gains;
         ConfigStore::saveGains(s.gains);
+        // The model learned with these gains (fan test included) is saved with them.
+        static roastermodel::RoasterModel model; // about 300 B: off the loop task stack
+        controller_.roasterModel(model);
+        if (roastermodel::usable(model))
+            ConfigStore::saveModel(model);
     }
 
     // The offsets change with correctionBt/correctionEt (a unit change keeps them); poll them.

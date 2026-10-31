@@ -7,6 +7,8 @@
 // Safety interlocks live here, so no network path can bypass them:
 // over-temperature, dead PID probe, no mains (AC dimmer), OTA in progress,
 // fan to the trip speed when a trip starts, minimum fan while heating, heater ceiling (HeaterOutput maxPercent).
+// The fan output is the operator's base fan plus fan assist, or the fan test's
+// level during autotune; every value goes through the interlocks above.
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -16,6 +18,8 @@
 #include "core/pid.h"
 #include "core/probe_correction.h"
 #include "core/autotune_sequence.h"
+#include "core/fan_assist.h"
+#include "core/roaster_model.h"
 #include "core/roast_profile.h"
 #include "hw/fan_output.h"
 #include "hw/heater_output.h"
@@ -58,6 +62,19 @@ public:
     // Thread-safe copy of the last autotune run's results and log.
     void autotuneReport(autotune::Report& out) const;
 
+    // What the saved autotune learned (roaster_model.h), and how it is used.
+    // Call setRoasterModel() and configureModelUse() before begin().
+    struct ModelUse {
+        bool fanFeedforward = true;  // CPID_FAN_FEEDFORWARD
+        bool rampFeedforward = true; // CPID_RAMP_FEEDFORWARD
+        bool fanAssist = true;       // option (NVS); acts only with a saved fan test
+        fanassist::Settings assist;  // limits from config.h (CPID_FAN_ASSIST_*)
+    };
+    void configureModelUse(const ModelUse& u);
+    void setRoasterModel(const roastermodel::RoasterModel& m);
+    // Thread-safe copy of the model in use (updated by ApplyAutotune).
+    void roasterModel(roastermodel::RoasterModel& out) const;
+
     static constexpr uint32_t kTickMs = 10;       // SSR timing resolution
     static constexpr uint32_t kControlEvery = 25; // => 250 ms sensor/PID period
 
@@ -78,6 +95,9 @@ private:
     void setAutotuneStatus(AutotuneStatus status, const char* reason = "");
     // The PV just stepped (PID input or correction change); see onPvStep().
     void handlePvStep(float newPv, const char* abortReason);
+    // Heater % added to the PID output: fan and setpoint-ramp feedforward.
+    float feedforward(float sp) const;
+    void setBaseFan(float pct);
 
     Thermocouples& tc_;
     HeaterOutput& heater_;
@@ -103,5 +123,12 @@ private:
     bool tripFanApplied_ = false; // trip fan set for the current trip
     MainsWatch mainsWatch_;
     uint32_t profileStartMs_ = 0, sensorBadSinceMs_ = 0;
+    float fanBase_ = 0; // operator's / recipe's / profile's fan
+    bool testFanOut_ = false; // the fan test's level is on the output
+    ModelUse use_;
+    roastermodel::RoasterModel model_;          // control task
+    roastermodel::RoasterModel modelPublished_; // copy under mux_
+    fanassist::Assist assist_;
+    roastermodel::SetpointSlope spSlope_;
     Snapshot published_;
 };

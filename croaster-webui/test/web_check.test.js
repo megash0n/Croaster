@@ -130,7 +130,7 @@ test('the page sends commands only from user actions', () => {
     "else if (r.seq !== S.recipeSeq) { S.recipeSeq = r.seq; send({ command: 'getRecipe' }); }",
     "send(undo ? { command: 'roastEvent', event: code, undo: true } : { command: 'roastEvent', event: code });",
     "send({ command: 'getAutotune' }, true); // polled: kept out of the reply log",
-    "confirmThen(A.confirmText(S.at), () => send({ command: 'autotune' }), 'OK');",
+    "send(fanText ? { command: 'autotune', fanTest: box.checked } : { command: 'autotune' });",
     'send({ command: { autotune: choice } });',
     'send(cmd);',
     'send({ command: payload });',
@@ -181,10 +181,12 @@ test('the socket is paused only through Link.mayPause or on pagehide, and Clear 
   assert.doesNotMatch(clear, /send\(|postMessage/);
 });
 
-test('autotune starts only from the confirm, and results change only from Save, Cancel or Discard', () => {
+test('autotune starts only from the start dialog, and results change only from Save, Cancel or Discard', () => {
   const app = read('app.js');
   const start = app.slice(app.indexOf('function startAutotune('), app.indexOf('function decideAutotune('));
-  assert.ok(start.indexOf('confirmThen(') >= 0 && start.indexOf('confirmThen(') < start.indexOf("send({ command: 'autotune' })"));
+  assert.match(start, /dlg\.onclose = \(\) => \{\s+if \(dlg\.returnValue !== 'ok'\) return;\s+send\(fanText \? \{ command: 'autotune', fanTest: box\.checked \} : \{ command: 'autotune' \}\);/);
+  assert.equal((start.match(/\bsend\(/g) || []).length, 1);
+  assert.match(html, /<input type="checkbox" id="at-fan-test" checked>/); // fan test on by default
   assert.doesNotMatch(html, /data-cmd='\{"command":"autotune"\}'/);
   const dlg = app.slice(app.indexOf('function showAutotuneDialog('), app.indexOf('function renderAutotune('));
   assert.match(dlg, /returnValue === 'save'\) decideAutotune\('apply'\)/);

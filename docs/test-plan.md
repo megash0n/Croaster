@@ -201,6 +201,36 @@ Bench run on the Behmor 2000AB (needs AC; about 45 to 65 min):
    highest BT at each point (the run stops above 304, 354 and 404 °F). The
    Behmor's own controls are bypassed, so stay with the roaster for the run.
 
+## Autotune fan test, feedforward and fan assist (D30, T62)
+Method: `docs/autotune/fan-test.md`.
+
+- Full run on the airflow drum: hold heater at 30/60/90 % within 2 % of the drum's, a dip and recovery after each step up, negative fan gain falling with fan, heater-off fall 65 to 100 % of the drum's and rising with fan, fan test under 40 min, estimate within 35 %. **host** `test_at_fan_test_on_drum`, `test_at_fan_test_bounds`
+- Fan test off (`fanTest:false` or `CPID_AUTOTUNE_FAN_TEST 0`) → run ends after the points, no `fanTest` object; heater-off check never falls more than 30 °C. **host**
+- STOP or a probe fault during the fan test → gains pending, fan test partial or failed with the levels so far. **host** `test_fan_test_stop_keeps_gains`
+- Fan feedforward: 30 → 90 % at 300 °F, BT dip smaller with it (6.4 → 2.4 °C simulated). Ramp feedforward: 8 °C/min ramp lag smaller (3.5 → 1.3 °C). **host**
+- Fan assist: never below the base fan, at most `CPID_FAN_ASSIST_MAX`, rate-limited, 0 in Manual, Autotune, cooldown and trips, 0 without a saved fan test. **host** `test_fan_assist_bounds`
+- Protocol: `fanTest` on start, `{"fanAssist":bool}`, `FanAssist` data, `getControl` `fanAssist`, report fan fields and `saved`. **host** `test_fan_protocol`, `test_fan_report_json`
+- Saving a run without a fan test keeps the saved fan test; model survives a reboot. **host** (`test_model_merge`); reboot untested
+- Page: start dialog with the Fan test checkbox ticked, minutes drop when unticked, `fanTest` sent; fan steps and table; dialog fan rows; Fan assist toggle; `+N assist` under the fan tile. **host** (`autotune.test.js`, `web_check.test.js`); bench untested
+
+Bench run (adds about 30 min to the autotune bench run above):
+
+1. Same setup; leave **Fan test** ticked. Do not touch the fan: the board
+   steps it 30 → 60 → 90 % on its own.
+2. After point 3 check: heater off from 350 °F until BT nears 300 °F, then a
+   steady hold; each fan step up shows a small BT dip and the heater rising.
+   Then the heater goes off at each level for about a minute (BT falls at
+   most 54 °F) and reheats in between.
+3. Record per level: hold heater, dip, recovery and heater-off fall from the
+   dialog. Expect the hold heater to rise with fan. Save.
+4. Feedforward: PID at 300 °F, fan 30 %, steady; step the fan to 90 %; note
+   the BT dip. Compare with `CPID_FAN_FEEDFORWARD 0` on a separate run.
+5. Fan assist: recipe ramp that ends with a hold below the current BT (or a
+   setpoint 15 °F under BT with the heater at 0 %); check the fan rises above
+   the set value by up to 20 %, Live shows `+N assist`, and the fan returns
+   once BT is back on the setpoint. STOP → fan goes to the cooldown speed,
+   no assist. Toggle off in Controls → no assist; survives a reboot.
+
 ## Autotune required (D24)
 - `CPID_REQUIRE_AUTOTUNE 1`, erased flash (`pio run -t erase`, then upload) → `getControl` `tuned` false; `{"command":{"mode":"pid"}}` → mode stays Manual, `autotune` "autotune required", OLED "Autotune first" for 10 s. **host** (gate and text, `test_autotune_required_gate`); bench todo
 - Same board, profile loaded, `startProfile` → refused the same way; profile still loaded. **host** (gate); bench todo

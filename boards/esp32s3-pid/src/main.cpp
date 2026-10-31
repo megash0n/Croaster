@@ -71,11 +71,13 @@ ControlSettings defaults() {
     d.pidInput = static_cast<PidInput>(CPID_PID_INPUT);
     d.cooldownFan = {CPID_COOLDOWN_FAN_STOP, CPID_COOLDOWN_FAN_TRIP};
     d.watchdog = {CPID_WATCHDOG_ENABLED != 0, CPID_WATCHDOG_TIMEOUT_S};
+    d.fanAssist = CPID_FAN_ASSIST != 0;
+    d.fanAssistMaxPct = CPID_FAN_ASSIST_MAX;
     return d;
 }
 ControlPlugin plugin(controller);
 #include <app/AutotunePlugin.h>
-AutotunePlugin autotuner(controller, plugin); // autotune report, apply and discard (docs/autotune)
+AutotunePlugin autotuner(controller, plugin, CPID_HEATER_MAX_PERCENT); // autotune report, apply and discard (docs/autotune)
 static_assert(CPID_AUTOTUNE_RULE_ZN_PI == static_cast<int>(autotune::Rule::ZieglerNicholsPi) &&
                   CPID_AUTOTUNE_RULE_TL_PI == static_cast<int>(autotune::Rule::TyreusLuybenPi) &&
                   CPID_AUTOTUNE_RULE_TL_PID == static_cast<int>(autotune::Rule::TyreusLuybenPid) &&
@@ -97,7 +99,23 @@ autotune::Config autotuneConfig() {
     c.abortAboveC = CPID_OVER_TEMP_C;
     c.totalTimeoutS = CPID_AUTOTUNE_TIME_LIMIT_MIN * 60.0f;
     c.rule = static_cast<autotune::Rule>(CPID_AUTOTUNE_RULE);
+    c.fanTest = CPID_AUTOTUNE_FAN_TEST != 0;
+    const float levels[] = {CPID_AUTOTUNE_FAN_LEVEL1, CPID_AUTOTUNE_FAN_LEVEL2, CPID_AUTOTUNE_FAN_LEVEL3};
+    for (int i = 0; i < 3; i++)
+        c.fanLevels[i] = levels[i];
+    c.fanLevelCount = 3; // zeros are dropped by makeFanLevels
+    c.fanTestC = CPID_AUTOTUNE_FAN_TEST_C;
+    c.fanShedMaxDropC = CPID_AUTOTUNE_FAN_SHED_DROP_C;
+    c.fanTimeoutS = CPID_AUTOTUNE_FAN_TIME_LIMIT_MIN * 60.0f;
     return c;
+}
+Controller::ModelUse modelUse(bool fanAssist) {
+    Controller::ModelUse u;
+    u.fanFeedforward = CPID_FAN_FEEDFORWARD != 0;
+    u.rampFeedforward = CPID_RAMP_FEEDFORWARD != 0;
+    u.fanAssist = fanAssist;
+    u.assist.maxExtraPct = CPID_FAN_ASSIST_MAX;
+    return u;
 }
 #include <app/RecipePlugin.h>
 RecipePlugin recipes(controller, plugin); // recipe steps run on the board (core/recipe.h)
@@ -171,6 +189,12 @@ void setup() {
     probes.begin();
     const ControlSettings settings = ConfigStore::load(defaults()); // NVS is ready from here on
     controller.configureAutotune(autotuneConfig());
+    controller.configureModelUse(modelUse(settings.fanAssist));
+    {
+        static roastermodel::RoasterModel saved; // about 300 B: off the setup stack
+        if (ConfigStore::loadModel(saved))
+            controller.setRoasterModel(saved);
+    }
     controller.begin(settings.gains, settings.gainsTuned, settings.pidInput, settings.cooldownFan.trip,
                      CPID_CONTROL_CORE, configMAX_PRIORITIES - 3);
     plugin.attach(app, settings);

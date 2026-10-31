@@ -317,6 +317,12 @@ Resolved by Shawn on 2026-10-28:
 | D25 | Board renamed `esp32s3-flex` → `esp32s3-pid` ("Croaster PID"), `FLEX_*` → `CPID_*`, `croaster-pid.aset`. |
 | D26 | Croaster monitor board `esp32s3-monitor` replaces the `CPID_HEATER_NONE` build; Croaster PID always has heater + fan. Prefix split: settings every Croaster board has are `CMON_`, control settings stay `CPID_`. |
 
+New 2026-10-31, open for Shawn:
+
+| Decision | Summary |
+|:---|:---|
+| D30 | Autotune fan test, fan and ramp feedforward, fan assist. |
+
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
 `src/core` (pure, host-tested), `src/hw` (ESP32 drivers) and `src/app`
@@ -1464,6 +1470,61 @@ New names, for Shawn to confirm: `autotune::Sequence` and its types,
 `DiscardAutotune`, `Snapshot::autotuneProgress`/`autotunePending`,
 `CPID_AUTOTUNE_*`, `getAutotune`, `{"autotune":"apply"|"discard"}`,
 `atTarget`, `recipeRunning`, `autotuneRunning`.
+
+### D30. Autotune fan test, feedforward and fan assist **DECISION (new 2026-10-31, open)**
+Shawn asked for autotune to measure the fan as well ("fan results - let PID
+use fan to shed"), with the focus on what airflow does to the beans. Airflow
+carries heat out of the drum by convection: at a fixed heater BT settles
+lower with more fan, a fan step dips BT until the PID integrator catches up,
+and once the heater is at 0 % the fan is the only way left to take heat out
+of beans running ahead of the curve (momentum late in drying and before
+first crack).
+
+- **Fan test**, optional, after the PID points (the gains exist by then),
+  on by default (`CPID_AUTOTUNE_FAN_TEST`, start dialog checkbox, `fanTest`
+  on the start command). At the middle test point the board holds BT with PI
+  at fan 30/60/90 % (`CPID_AUTOTUNE_FAN_LEVEL*`) and measures the hold
+  heater, the dip and recovery after each step, the fan gain, and a bounded
+  heater-off fall per level (`CPID_AUTOTUNE_FAN_SHED_DROP_C`, 30 °C). About
+  29 minutes on the simulated drum; 40-minute limit. Method and numbers:
+  `docs/autotune/fan-test.md`.
+- **Results** show in the existing Save/Cancel dialog and wait in RAM. Save
+  stores the gains and a versioned roaster model blob in NVS; a run without
+  a fan test keeps the saved one. The model holds two fan channels; only the
+  exhaust fan is measured now.
+- **A stop or fault during the fan test ends only the fan test**: the gains
+  stay pending with the levels measured so far.
+- **D23 refined:** only fan changes from outside abort autotune; the fan
+  test's own steps do not. Every fan and heater change still goes through the
+  controller's limits and interlocks (min fan while heating, trips).
+- **Fan feedforward** (`CPID_FAN_FEEDFORWARD`) adds the hold-heater
+  difference for the current fan; **ramp feedforward**
+  (`CPID_RAMP_FEEDFORWARD`) adds τ·slope/K while the setpoint moves (±40 %).
+- **Fan assist** (`CPID_FAN_ASSIST`, page toggle, NVS `fanAs`): in PID and
+  Profile, when BT is more than 2 °C above the setpoint and the heater is at
+  or near 0 %, the fan rises above the user's or recipe's value, 5 % per °C,
+  up to `CPID_FAN_ASSIST_MAX` (20 %), 1 %/s up and 2 %/s down. Never below
+  the base, never during cooldown, trips or autotune, off without a saved
+  fan test, shown on Live.
+
+To confirm: the fan test length (about 29 min, so a full run is about
+66 min); the 30 °C heater-off bound (300 °F down to about 246 °F at most);
+keeping the previous fan test when a new run has none; the fan test holds
+use the autotune output limit (100 %) while the heater ceiling is
+`CPID_HEATER_MAX_PERCENT` (90 %); fan assist on by default.
+New names, for Shawn to confirm: `roastermodel` (`RoasterModel`,
+`PointModel`, `FanModel`, `FanLevel`, `fromReport`, `merge`, `usable`,
+`holdPct`, `fanFeedforward`, `rampFeedforward`, `maxRorCpm`,
+`SetpointSlope`, `kMaxFanChannels`, `kMaxRampFfPct`), `fanassist::Assist`
+and `Settings`, `autotune::makeFanLevels`, `FanTestResult`,
+`FanLevelResult`, `FanTestStatus`, `Phase::FanHold`/`FanShed`,
+`Sequence::fanRequest`, `Controller::ModelUse`, `configureModelUse`,
+`setRoasterModel`, `roasterModel`, `Command::Kind::SetFanAssist`,
+`Snapshot::fanBasePct`/`fanAssistPct`/`fanAssistOn`/`fanTested`,
+`ConfigStore::saveModel`/`loadModel`/`saveFanAssist`, the `CPID_AUTOTUNE_FAN_*`,
+`CPID_FAN_FEEDFORWARD`, `CPID_RAMP_FEEDFORWARD`, `CPID_FAN_ASSIST*`
+settings, NVS keys `model` and `fanAs`, protocol `fanTest`, `fanAssist`,
+`FanAssist`, `fanEstimate`, `saved`.
 
 ## Build platform and sdkconfig
 - Default: `platformio/espressif32 @ 8.0.0` (Arduino-ESP32 3.3.12, IDF 5.5).

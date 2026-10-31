@@ -85,3 +85,68 @@ test('refusals read plainly; polling is fast only while running or pending', () 
   assert.equal(A.fmtGain(0.0161234), '0.01612');
   assert.equal(A.ruleName('tyreus-luyben-pi'), 'Tyreus–Luyben PI');
 });
+
+// ---------- fan test ----------
+const fanPlan = Object.assign({}, plan, { estimate: 5100, fanTest: true, fanLevels: [30, 60, 90], fanTarget: 300,
+  fanTimeLimit: 2400, fanEstimate: 1800 });
+const fanLevel = (fan, hold, shed) => ({ fan, hold, dip: 1.2, recovery: 18, gain: -0.92, tau: 240, shed });
+
+test('start dialog: the fan test sentence and the estimate with and without it', () => {
+  const rep = { unit: 'F', plan: fanPlan };
+  assert.match(A.fanTestText(rep), /^Measures how airflow removes heat from the beans: after the PID test points it holds 300 °F at fan 30, 60 and 90 %/);
+  assert.match(A.fanTestText(rep), /Adds about 30 min\.$/);
+  assert.match(A.confirmText(rep, true), /about 85 minutes/);
+  assert.match(A.confirmText(rep, false), /about 55 minutes/);
+  assert.match(A.confirmText(rep), /about 85 minutes/); // default: the board's plan
+  assert.equal(A.fanTestText({ unit: 'F', plan }), ''); // a board without the fan test
+  assert.equal(A.levelList([30]), '30 %');
+});
+
+test('step list: fan holds and the heater-off check follow the points', () => {
+  const r = running('fan-hold', 2, 0);
+  r.plan = fanPlan;
+  Object.assign(r.progress, { fanLevel: 1, fanLevels: 3, fan: 60 });
+  const s = A.steps(r);
+  assert.equal(s.length, 14);
+  assert.ok(s.slice(0, 10).every((x) => x.state === 'done'));
+  assert.deepEqual(s.slice(10).map((x) => x.state), ['done', 'active', 'pending', 'pending']);
+  assert.equal(s[11].label, 'Hold at 300 °F with fan 60 %');
+  assert.match(A.progressText(r), /^Fan test, level 2 of 3 \(fan 60 %\) · 10:00 elapsed/);
+  r.phase = 'fan-shed';
+  r.progress.fan = 90;
+  assert.deepEqual(A.steps(r).slice(10).map((x) => x.state), ['done', 'done', 'done', 'active']);
+  assert.equal(A.steps(r)[13].detail, 'fan 90 %');
+  // A run started without the fan test lists none.
+  const p = running('oscillating', 1, 3);
+  p.plan = fanPlan;
+  p.progress.fanLevels = 0;
+  assert.equal(A.steps(p).length, 10);
+});
+
+test('fan results: rows, summary and a run stopped during the fan test', () => {
+  const d = done();
+  d.plan = fanPlan;
+  d.fanTest = { status: 'ok', failure: '', channel: 'exhaust', target: 300, duration: 1750,
+    levels: [fanLevel(30, 39.3, 50.4), fanLevel(60, 45.5, 56.3), fanLevel(90, 50.5, 62)] };
+  const rows = A.fanRows(d);
+  assert.deepEqual(rows[1], { fan: '60 %', hold: '45.5 %', dip: '1.2 °F', recovery: '18 s', gain: '-0.92 °F/%', shed: '56.3 °F/min' });
+  assert.match(A.fanSummary(d), /^Fan test at 300 °F complete/);
+  assert.ok(A.steps(d).every((x) => x.state === 'done'));
+  d.fanTest.status = 'partial';
+  d.fanTest.failure = 'stopped';
+  d.fanTest.levels[2] = fanLevel(90, NaN, NaN);
+  d.fanTest.levels.forEach((l) => { l.shed = null; });
+  assert.match(A.fanSummary(d), /incomplete \(stopped by the user\)\. Save keeps the levels it measured/);
+  assert.deepEqual(A.steps(d).slice(10).map((x) => x.state), ['done', 'done', 'skipped', 'skipped']);
+  d.fanTest.status = 'failed';
+  d.fanTest.failure = 'too few levels';
+  assert.match(A.fanSummary(d), /^Fan test failed \(fewer than two fan levels held steady\)/);
+  assert.equal(A.fanSummary(done()), '');
+  assert.deepEqual(A.fanRows(done()), []);
+});
+
+test('live fan assist text', () => {
+  assert.equal(A.assistText({ FanVal: 72, FanAssist: 12 }), '+12 assist');
+  assert.equal(A.assistText({ FanVal: 60, FanAssist: 0 }), '');
+  assert.equal(A.assistText({ FanVal: 60 }), '');
+});

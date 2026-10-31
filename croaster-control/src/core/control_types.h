@@ -87,7 +87,7 @@ struct Command {
         SetMode,     // a = (float)Mode  (Manual or Pid; others via Start*)
         SetPidInput, // a = (float)PidInput
         SetGains,    // a,b,c = kp,ki,kd
-        StartAutotune,
+        StartAutotune, // a = fan test 1/0, NaN = the configured default (CPID_AUTOTUNE_FAN_TEST)
         StartProfile, // profile must already be loaded via Controller::loadProfile
         Stop,         // heater 0, back to Manual (fan unchanged)
         EmergencyOff, // heater 0, fan 100, Manual
@@ -97,6 +97,7 @@ struct Command {
         SetCorrection, // a, b = BT, ET correction offsets, C differences (CroasterCore::correctionBtCelsius)
         ApplyAutotune,   // pending autotune gains -> in use; autotuneSeq++ saves them
         DiscardAutotune, // drop pending autotune results
+        SetFanAssist,    // a = 1/0; acts only with a saved fan test (fan_assist.h)
     };
     Kind kind;
     float a = 0, b = 0, c = 0;
@@ -117,7 +118,11 @@ struct Snapshot {
     float etRaw = NAN, btRaw = NAN;          // this sample, NaN on fault
     uint8_t etFault = 0, btFault = 0;        // converter fault bits (see max31855.h / max6675.h)
     float heaterPct = 0;                     // requested 0..100 (PID output or manual)
-    float fanPct = 0;
+    float fanPct = 0;     // fan output now (base + assist, or the fan test's level)
+    float fanBasePct = 0; // the user's, recipe's or profile's fan
+    float fanAssistPct = 0; // extra fan from fan assist (0 when idle or off)
+    bool fanAssistOn = false; // option set (saved in NVS)
+    bool fanTested = false;   // a fan test is saved with the gains
     float setpoint = 0;
     Mode mode = Mode::Manual;
     PidInput pidInput = PidInput::BT;
@@ -164,7 +169,9 @@ inline PvStepAction onPvStep(Mode m) {
 // command, or a fan command that changes the speed, stops autotune (heater off),
 // like a setpoint or offset change. Returns the abort reason, or nullptr. The
 // fan rule at autotune start (below 30 % -> 60 %) is set by the controller, not
-// a command, so it never counts.
+// a command, so it never counts. `currentFan` is the operator's fan (the
+// controller's base fan), not the fan test's level: the fan test's own steps
+// are not commands, and a client re-sending the operator's value is no change.
 inline const char* outputCommandStopsAutotune(Mode m, Command::Kind k, float requested, float currentFan) {
     if (m != Mode::Autotune)
         return nullptr;

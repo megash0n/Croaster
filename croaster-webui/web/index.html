@@ -68,7 +68,7 @@
         <div class="tile et"><span class="tile-label">ET</span><span class="tile-value num" id="t-et">—</span><span class="tile-unit" data-unit></span></div>
         <div class="tile ror"><span class="tile-label">RoR <small id="ror-src">device</small></span><span class="tile-value num" id="t-ror">—</span><span class="tile-unit" id="t-ror-et"></span></div>
         <div class="tile heat" data-field="BurnerVal"><span class="tile-label">Heater</span><span class="tile-value num" id="t-heat">—</span><span class="tile-unit">%</span></div>
-        <div class="tile fan" data-field="FanVal"><span class="tile-label">Fan</span><span class="tile-value num" id="t-fan">—</span><span class="tile-unit">%</span></div>
+        <div class="tile fan" data-field="FanVal"><span class="tile-label">Fan</span><span class="tile-value num" id="t-fan">—</span><span class="tile-unit">%</span><span class="tile-sub small" id="t-fan-assist" title="Fan assist: extra airflow while BT runs above the setpoint with the heater off" hidden></span></div>
         <div class="tile sv" data-field="SV"><span class="tile-label">Setpoint</span><span class="tile-value num" id="t-sv">—</span><span class="tile-unit" data-unit></span></div>
         <div class="tile mode" data-field="Mode"><span class="tile-label">Mode</span><span class="tile-value" id="t-mode">—</span><span class="tile-unit" id="t-trip"></span></div>
       </div>
@@ -167,6 +167,12 @@
             <label>Kd <input type="number" name="kd" step="any" required></label>
             <button type="submit">Save gains</button>
           </form>
+          <form class="field wide" data-send="fanAssist">
+            <span>Fan assist</span>
+            <label><input type="checkbox" name="enabled"> enabled</label>
+            <button type="submit">Save</button>
+            <span class="muted small" id="fan-assist-note">Raises the fan above your setting when BT runs above the setpoint with the heater already off, to shed heat from the beans. Needs a saved autotune fan test.</span>
+          </form>
           <p class="muted small">The board caps the heater and setpoint at its configured limits and keeps the fan up while heating.</p>
         </div>
 
@@ -209,6 +215,13 @@
               <tbody></tbody>
             </table>
             <p class="small" id="at-recommended"></p>
+            <div id="at-fan" hidden>
+              <p class="small" id="at-fan-summary"></p>
+              <table class="at-table" id="at-fan-table">
+                <thead><tr><th>Fan</th><th>Hold heater</th><th>BT dip</th><th>Recovery</th><th>Fan gain</th><th>Heater-off fall</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
             <div class="row-buttons" id="at-choice">
               <button type="button" id="at-review">Review and save…</button>
               <button type="button" class="ghost" id="at-discard">Discard</button>
@@ -333,6 +346,19 @@
   </form>
 </dialog>
 
+<dialog id="at-start-dialog" aria-labelledby="at-start-title">
+  <form method="dialog">
+    <h2 id="at-start-title">Start autotune</h2>
+    <p class="small" id="at-start-text"></p>
+    <label class="small at-fan-option" id="at-fan-option"><input type="checkbox" id="at-fan-test" checked> Fan test
+      <span class="muted" id="at-fan-text"></span></label>
+    <div class="row-buttons">
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="ok" autofocus>Start</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="at-dialog" aria-labelledby="at-dialog-title">
   <form method="dialog">
     <h2 id="at-dialog-title">Autotune results</h2>
@@ -345,7 +371,14 @@
       <thead><tr><th></th><th>Current</th><th>New</th></tr></thead>
       <tbody></tbody>
     </table>
-    <p class="muted small">Save applies the new gains and stores them on the board. Cancel keeps the current gains and discards these results.</p>
+    <div id="at-dialog-fan" hidden>
+      <p class="small" id="at-dialog-fan-summary"></p>
+      <table class="at-table" id="at-dialog-fan-table">
+        <thead><tr><th>Fan</th><th>Hold heater</th><th>Fan gain</th><th>Heater-off fall</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted small">Save applies the new gains and stores them on the board, with the fan test results. Cancel keeps the current gains and discards these results.</p>
     <div class="row-buttons">
       <button value="cancel" class="ghost">Cancel</button>
       <button value="save" autofocus>Save</button>

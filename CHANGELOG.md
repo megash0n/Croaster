@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Autotune fan test, feedforward and fan assist (D30, T62).** An optional
+  stage after the PID points, on by default (`CPID_AUTOTUNE_FAN_TEST`,
+  **Fan test** in the new start dialog, `{"command":"autotune","fanTest":false}`
+  to skip): at the middle test point the board holds BT at fan 30, 60 and
+  90 % and measures the hold heater, the BT dip and recovery after each
+  step, the fan gain and a heater-off fall bounded to 30 °C. A stop or fault
+  during the fan test keeps the gains. Results join the Save/Cancel dialog;
+  Save also stores a versioned roaster model in NVS. PID and Profile add fan
+  feedforward (`CPID_FAN_FEEDFORWARD`) and setpoint-slope feedforward
+  (`CPID_RAMP_FEEDFORWARD`). Fan assist (`CPID_FAN_ASSIST`,
+  `CPID_FAN_ASSIST_MAX`, `{"command":{"fanAssist":bool}}`, Controls toggle)
+  raises the fan above the user's or recipe's value when BT runs above the
+  setpoint with the heater off, shown as `+N assist` on Live and `FanAssist`
+  in data. Only outside fan changes abort autotune. Docs in
+  `docs/autotune/fan-test.md`.
 - **Multi-point autotune (D29, T57).** `{"command":"autotune"}` needs no
   setpoint: the board heats to each test point (`CPID_AUTOTUNE_POINT*_C`,
   default 250/300/350 °F), runs a relay with bias correction until three

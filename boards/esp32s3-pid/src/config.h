@@ -142,6 +142,26 @@
 #define CPID_AUTOTUNE_RULE_TL_PID 2      // Tyreus-Luyben PID: D term amplifies probe noise
 #define CPID_AUTOTUNE_RULE_SIMC_PI 3     // SIMC PI from the fitted dead-time model
 #define CPID_AUTOTUNE_RULE CPID_AUTOTUNE_RULE_ZN_PI
+// Fan test (docs/autotune/fan-test.md): after the points, autotune holds the
+// fan test temperature at each fan level and measures how much heat the airflow
+// takes from the drum: the holding heater, the BT dip after each step up, and the
+// BT fall in a short heater-off window. The start dialog can skip it.
+#define CPID_AUTOTUNE_FAN_TEST 1          // 1: on by default
+#define CPID_AUTOTUNE_FAN_LEVEL1 30       // fan %, ascending; 0 drops a level
+#define CPID_AUTOTUNE_FAN_LEVEL2 60
+#define CPID_AUTOTUNE_FAN_LEVEL3 90
+#define CPID_AUTOTUNE_FAN_TEST_C 0        // 0: the middle test point (300 F)
+#define CPID_AUTOTUNE_FAN_SHED_DROP_C 30  // heater-off window ends this far under the target
+#define CPID_AUTOTUNE_FAN_TIME_LIMIT_MIN 40
+// What the saved autotune results are used for (roaster_model.h):
+#define CPID_FAN_FEEDFORWARD 1  // PID adds the heater a fan change needs, at once
+#define CPID_RAMP_FEEDFORWARD 1 // PID adds the heater a setpoint ramp needs
+// Fan assist: in PID and recipe runs, with BT above the path and the heater at
+// 0 %, raise the fan above the set value to shed the beans' extra heat. Acts only
+// with a saved fan test. First-boot default; {"command":{"fanAssist":bool}}
+// changes it and it is saved in NVS.
+#define CPID_FAN_ASSIST 1
+#define CPID_FAN_ASSIST_MAX 20 // most fan % added above the set value
 #define CPID_OVER_TEMP_C 275      // 527 F; any probe above: heater off, fan 100 %
 #define CPID_MAX_SETPOINT_C 250   // 482 F; higher setpoints are capped here
 #define CPID_MIN_FAN_WITH_HEAT 30 // fan forced to at least this while heating

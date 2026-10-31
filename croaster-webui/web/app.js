@@ -33,7 +33,7 @@
   const LABELS = {
     name: 'Device name', BT: 'Bean temp (BT)', ET: 'Environment temp (ET)', DBT: 'BT rate of rise',
     DET: 'ET rate of rise', cBT: 'BT correction', cET: 'ET correction', temp: 'Unit', interval: 'Broadcast interval (s)',
-    timer: 'Uptime (s)', BurnerVal: 'Heater (%)', FanVal: 'Fan (%)', SV: 'Setpoint', Mode: 'Mode', trip: 'Trip',
+    timer: 'Uptime (s)', BurnerVal: 'Heater (%)', FanVal: 'Fan (%)', FanAssist: 'Fan assist (%)', SV: 'Setpoint', Mode: 'Mode', trip: 'Trip',
     Amb: 'Cold junction', Target: 'PID input', autotune: 'Autotune', pidKp: 'PID Kp', pidKi: 'PID Ki',
     pidKd: 'PID Kd', wifiStrength: 'WiFi RSSI (dBm)', loopStackFree: 'Loop stack free (bytes)',
     mode: 'Mode', pidInput: 'PID input', setpoint: 'Setpoint', burner: 'Heater (%)', fan: 'Fan (%)',
@@ -398,6 +398,9 @@
     $('#t-ror-et').textContent = isNum(d.DET) ? 'ET ' + d.DET.toFixed(1) + ' ' + unitLabel() + '/min' : unitLabel() + '/min';
     $('#t-heat').textContent = fmt(d.BurnerVal, 0);
     $('#t-fan').textContent = fmt(d.FanVal, 0);
+    const assist = A.assistText(d);
+    $('#t-fan-assist').hidden = !assist;
+    $('#t-fan-assist').textContent = assist;
     $('#t-sv').textContent = fmt(d.SV);
     $('#t-mode').textContent = d.Mode || '—';
     const stop = $('#stop');
@@ -717,6 +720,14 @@
     fill('pid', { kp: d.pidKp, ki: d.pidKi, kd: d.pidKd });
     if (c.cooldownFan) fill('cooldownFan', c.cooldownFan);
     if (c.watchdog) fill('watchdog', c.watchdog);
+    const fa = c.fanAssist;
+    $('form[data-send="fanAssist"]').hidden = !fa;
+    if (fa) {
+      fill('fanAssist', { enabled: fa.enabled });
+      $('#fan-assist-note').textContent = 'Raises the fan above your setting, by up to ' + (isNum(fa.max) ? fa.max : 20) +
+        ' %, when BT runs above the setpoint with the heater already off, to shed heat from the beans. ' +
+        (fa.available ? 'Uses the saved autotune fan test.' : 'Inactive until an autotune fan test is saved.');
+    }
     fill('tempUnit', { value: d.temp });
     fill('interval', { value: d.interval });
     fill('correctionBt', { value: d.cBT });
@@ -744,6 +755,7 @@
       case 'pid': return { pid: { kp: n('kp'), ki: n('ki'), kd: n('kd') } };
       case 'cooldownFan': return { cooldownFan: { stop: n('stop'), trip: n('trip') } };
       case 'watchdog': return { watchdog: { enabled: f.enabled.checked, timeout: Math.round(n('timeout')) } };
+      case 'fanAssist': return { fanAssist: f.enabled.checked };
       case 'tempUnit': return { tempUnit: f.value.value };
       case 'interval': return { interval: Math.round(n('value')) };
       case 'correctionBt': return { correctionBt: n('value') };
@@ -1245,7 +1257,30 @@
   function startAutotune() {
     S.atError = '';
     if (S.recipe && S.recipe.state === 'running') { S.atError = A.refusal('recipeRunning'); S.dirty = true; return; }
-    confirmThen(A.confirmText(S.at), () => send({ command: 'autotune' }), 'OK');
+    const dlg = $('#at-start-dialog');
+    const box = $('#at-fan-test');
+    const fanText = A.fanTestText(S.at);
+    $('#at-fan-option').hidden = !fanText;
+    $('#at-fan-text').textContent = fanText;
+    box.checked = !!fanText;
+    const text = () => { $('#at-start-text').textContent = A.confirmText(S.at, box.checked); };
+    box.onchange = text;
+    text();
+    dlg.returnValue = '';
+    dlg.onclose = () => {
+      if (dlg.returnValue !== 'ok') return;
+      send(fanText ? { command: 'autotune', fanTest: box.checked } : { command: 'autotune' });
+    };
+    dlg.showModal();
+  }
+
+  function fanTables(rep, wrap, summary, body, full) {
+    const rows = A.fanRows(rep);
+    $(wrap).hidden = !rows.length && !A.fanSummary(rep);
+    $(summary).textContent = A.fanSummary(rep);
+    const b = $(body);
+    b.textContent = '';
+    for (const r of rows) b.append(cells(el('tr'), full ? [r.fan, r.hold, r.dip, r.recovery, r.gain, r.shed] : [r.fan, r.hold, r.gain, r.shed]));
   }
 
   function decideAutotune(choice) {
@@ -1272,6 +1307,7 @@
     const g = $('#at-dialog-gains tbody');
     g.textContent = '';
     for (const r of gains) g.append(cells(el('tr'), [r.name, r.current, r.next]));
+    fanTables(rep, '#at-dialog-fan', '#at-dialog-fan-summary', '#at-dialog-fan-table tbody', false);
     dlg.returnValue = '';
     dlg.onclose = () => {
       if (dlg.returnValue === 'save') decideAutotune('apply');
@@ -1288,7 +1324,9 @@
     const pts = rep && rep.plan ? A.pointList(rep.plan.points, rep.unit) : '';
     const n = rep && rep.plan ? A.minutes(rep.plan.estimate) : null;
     $('#at-plan').textContent = 'Heats to ' + (pts || 'a few test temperatures') + ', measures the response at each and ' +
-      'calculates PID gains' + (n ? '. About ' + n + ' min.' : '.') + ' Nothing changes until you save the results.';
+      'calculates PID gains' + (n ? '. About ' + n + ' min.' : '.') +
+      (rep && rep.plan && rep.plan.fanTest ? ' An optional fan test then measures how airflow removes heat from the beans.' : '') +
+      ' Nothing changes until you save the results.';
     $('#at-start').disabled = running || S.link !== 'open';
     $('#at-start').hidden = running;
     $('#at-stop').hidden = !running;
@@ -1311,6 +1349,7 @@
     const body = $('#at-table tbody');
     body.textContent = '';
     for (const r of rows) body.append(cells(el('tr'), [r.target, r.status, r.cycles, r.swing, r.period, r.ku, r.kp, r.ki, r.kd]));
+    fanTables(rep, '#at-fan', '#at-fan-summary', '#at-fan-table tbody', true);
     const gains = A.gainRows(rep);
     $('#at-choice').hidden = !gains;
     $('#at-recommended').textContent = gains ? 'Recommended: ' + gains.map((g) => g.name + ' ' + g.next).join(', ') +

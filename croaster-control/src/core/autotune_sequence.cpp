@@ -10,6 +10,15 @@ constexpr float kPi = 3.14159265f;
 constexpr float kRateWindowS = 10;   // heat-up rate sample window
 constexpr float kMinSwingRatio = 2;  // amplitude must exceed this many hysteresis bands
 constexpr int kExtraSettle = 2;      // settling may run this many cycles past settleCycles
+constexpr float kRecoverC = 0.5f;    // fan step: BT back within this of the held temperature
+constexpr float kFallCps = 0.3f;     // fan test estimate: heater-off fall toward the held temperature, C/s
+constexpr float kArriveC = 3;        // fan hold: BT this close counts as arrived
+constexpr float kReheatS = 90;       // fan test estimate: back up to the held temperature after a window
+constexpr float kReheatBandC = 2.5f; // reheat: BT this close to the held temperature
+
+bool fanPhase(Phase p) {
+    return p == Phase::FanHold || p == Phase::FanShed;
+}
 
 float meanOf(const float* v, int n) {
     float s = 0;
@@ -46,6 +55,8 @@ const char* phaseName(Phase p) {
     case Phase::Done: return "done";
     case Phase::Failed: return "failed";
     case Phase::Aborted: return "aborted";
+    case Phase::FanHold: return "fan-hold";
+    case Phase::FanShed: return "fan-shed";
     case Phase::Idle:
     default: return "idle";
     }
@@ -141,6 +152,17 @@ Model Sequence::fitModel(float ku, float tu, float targetC, float ambientC, floa
     return m;
 }
 
+const char* fanTestStatusName(FanTestStatus s) {
+    switch (s) {
+    case FanTestStatus::Running: return "running";
+    case FanTestStatus::Ok: return "ok";
+    case FanTestStatus::Partial: return "partial";
+    case FanTestStatus::Failed: return "failed";
+    case FanTestStatus::Skipped:
+    default: return "skipped";
+    }
+}
+
 float Sequence::estimateSeconds(const Config& c, float pv) {
     Sequence s;
     s.cfg_ = c;
@@ -167,18 +189,87 @@ float Sequence::remaining(float pv) const {
         }
         from = to;
     }
-    return std::min(s, std::max(0.0f, cfg_.totalTimeoutS - t_));
+    s = std::min(s, std::max(0.0f, cfg_.totalTimeoutS - t_));
+    return s + fanRemaining();
+}
+
+// Fan test time still to come: the heater-off fall from the top point to the
+// held temperature, each level's minimum hold plus the blocks a PI loop
+// typically needs to settle after a fan step, and the shed windows with their reheats.
+float Sequence::fanRemaining() const {
+    if (!cfg_.fanTest || cfg_.fanLevelCount <= 0 || cfg_.pointCount <= 0)
+        return 0;
+    const int n = cfg_.fanLevelCount;
+    const float window = cfg_.fanShedSkipS + cfg_.fanShedWindowS;
+    const float shed = n * window + (n - 1) * (kReheatS + cfg_.fanReheatHoldS);
+    const float hold = cfg_.fanSettleMinS + 4 * cfg_.fanBlockS;
+    float s = 0;
+    if (p_.phase == Phase::FanShed) {
+        s = std::max(0.0f, shed - (t_ - fanShedStartT_));
+    } else if (p_.phase == Phase::FanHold) {
+        const float into = arriveT_ >= 0 ? t_ - arriveT_ : 0;
+        s = std::max(0.0f, hold - into) + (n - 1 - p_.fanLevel) * hold + shed;
+        if (arriveT_ < 0)
+            s += std::max(0.0f, holdPv_ - fan_.testC) / kFallCps;
+    } else {
+        const float top = cfg_.pointsC[cfg_.pointCount - 1];
+        s = std::max(0.0f, top - fanTestTemp()) / kFallCps + n * hold + shed;
+    }
+    const float left = fanPhase(p_.phase) ? cfg_.fanTimeoutS - (t_ - fanStartT_) : cfg_.fanTimeoutS;
+    return std::min(s, std::max(0.0f, left));
+}
+
+float Sequence::holdEstimate() const {
+    const float tf = fan_.testC, amb = cfg_.ambientC;
+    int best = -1;
+    for (int i = 0; i < cfg_.pointCount; i++)
+        if (pts_[i].bias > 0 && (best < 0 || std::fabs(pts_[i].targetC - tf) < std::fabs(pts_[best].targetC - tf)))
+            best = i;
+    if (best < 0 || !(pts_[best].targetC - amb > 1))
+        return 0;
+    return std::min(cfg_.outputMax, pts_[best].bias * (tf - amb) / (pts_[best].targetC - amb));
+}
+
+float Sequence::fanTestTemp() const {
+    if (cfg_.fanTestC > 0)
+        return cfg_.fanTestC;
+    return cfg_.pointCount > 0 ? cfg_.pointsC[(cfg_.pointCount - 1) / 2] : 0;
 }
 
 void Sequence::start(const Config& c, float pv) {
+    start(c, pv, NAN);
+}
+
+void makeFanLevels(Config& cfg) {
+    const int n = std::max(0, std::min(cfg.fanLevelCount, kMaxFanLevels));
+    float v[kMaxFanLevels];
+    int k = 0;
+    for (int i = 0; i < n; i++)
+        if (std::isfinite(cfg.fanLevels[i]) && cfg.fanLevels[i] > 0)
+            v[k++] = std::min(100.0f, cfg.fanLevels[i]);
+    std::sort(v, v + k);
+    int m = 0;
+    for (int i = 0; i < k; i++)
+        if (m == 0 || v[i] - v[m - 1] >= 5)
+            v[m++] = v[i];
+    for (int i = 0; i < kMaxFanLevels; i++)
+        cfg.fanLevels[i] = i < m ? v[i] : 0;
+    cfg.fanLevelCount = m;
+}
+
+void Sequence::start(const Config& c, float pv, float fanPct) {
     const uint32_t changes = changes_;
     *this = Sequence();
     changes_ = changes + 1; // a new run always reads as a change
     cfg_ = c;
+    makeFanLevels(cfg_);
+    fan_.startFanPct = fanPct;
+    fan_.ambientC = cfg_.ambientC;
     cfg_.pointCount = std::max(0, std::min(cfg_.pointCount, kMaxPoints));
     cfg_.minCycles = std::max(2, std::min(cfg_.minCycles, kMaxCycles));
     cfg_.maxCycles = std::max(cfg_.minCycles, std::min(cfg_.maxCycles, kMaxCycles));
     p_.pointCount = (uint8_t)cfg_.pointCount;
+    p_.fanLevelCount = (uint8_t)(cfg_.fanTest ? cfg_.fanLevelCount : 0); // known from the start, for the step list
     for (int i = 0; i < cfg_.pointCount; i++)
         pts_[i].targetC = cfg_.pointsC[i];
     bias_ = cfg_.initialBias;
@@ -238,10 +329,21 @@ void Sequence::fillReport(Report& r) const {
     r.logCount = logCount_;
     for (int i = 0; i < logCount_; i++)
         r.log[i] = logAt(i);
+    r.fan = fan_;
+}
+
+// The gains are computed before the fan test starts, so a stop or a fault
+// during the fan test ends only the fan test: the run finishes with the gains
+// and whatever fan levels were measured.
+bool Sequence::endFanTestEarly(const char* why) {
+    if (p_.phase != Phase::FanHold && p_.phase != Phase::FanShed)
+        return false;
+    finishFanTest(FanTestStatus::Partial, why);
+    return true;
 }
 
 void Sequence::fail(const char* why) {
-    if (!running())
+    if (!running() || endFanTestEarly(why))
         return;
     failure_ = why;
     p_.output = 0;
@@ -251,7 +353,7 @@ void Sequence::fail(const char* why) {
 }
 
 void Sequence::abort(const char* reason) {
-    if (!running())
+    if (!running() || endFanTestEarly(reason))
         return;
     failure_ = reason;
     p_.output = 0;
@@ -278,12 +380,19 @@ float Sequence::update(float pv) {
         fail("over temperature");
         return 0;
     }
-    if (pv > p_.targetC + cfg_.maxOvershootC) {
+    // The fan test starts from the top point, above its own held temperature.
+    const bool fanRun = fanPhase(p_.phase);
+    const float ref = fanRun ? std::max(p_.targetC, cfg_.pointsC[cfg_.pointCount - 1]) : p_.targetC;
+    if (pv > ref + cfg_.maxOvershootC) {
         fail("overshoot");
         return 0;
     }
-    if (t_ > cfg_.totalTimeoutS) {
+    if (!fanRun && t_ > cfg_.totalTimeoutS) {
         fail("time limit");
+        return 0;
+    }
+    if (fanRun && t_ - fanStartT_ > cfg_.fanTimeoutS) {
+        finishFanTest(FanTestStatus::Partial, "time limit");
         return 0;
     }
 
@@ -324,6 +433,12 @@ float Sequence::update(float pv) {
         break;
     case Phase::Computing:
         finishPoint();
+        break;
+    case Phase::FanHold:
+        fanHoldStep(pv);
+        break;
+    case Phase::FanShed:
+        fanShedStep(pv);
         break;
     default:
         break;
@@ -450,6 +565,314 @@ void Sequence::finishRun() {
     rec_.kp = kp;
     rec_.ki = kp / ti;
     rec_.kd = kp * td;
+    p_.output = 0;
+    if (cfg_.fanTest && cfg_.fanLevelCount > 0) {
+        startFanTest();
+        return;
+    }
+    p_.remainingS = 0;
+    p_.phase = Phase::Done;
+    addLog(rec_.kp, rec_.ki);
+}
+
+// ---------- fan test (docs/autotune/fan-test.md) ----------
+// Hold the test temperature with PI from the new gains at each fan level in
+// turn (ascending, the way a roaster raises airflow through a roast), then
+// turn the heater off and step back down through the levels, timing the fall.
+
+void Sequence::startFanTest() {
+    fan_.status = FanTestStatus::Running;
+    fan_.channel = cfg_.fanChannel;
+    fan_.testC = fanTestTemp();
+    fan_.ambientC = cfg_.ambientC;
+    fan_.levelCount = cfg_.fanLevelCount;
+    for (int i = 0; i < fan_.levelCount; i++)
+        fan_.levels[i] = FanLevelResult{}, fan_.levels[i].fanPct = cfg_.fanLevels[i];
+    fanStartT_ = t_;
+    holdPv_ = p_.targetC;
+    Pid::Config pc;
+    pc.dtSeconds = cfg_.dtSeconds;
+    pc.outMin = 0;
+    pc.outMax = cfg_.outputMax;
+    hold_ = Pid(pc);
+    hold_.setGains(rec_);
+    p_.targetC = fan_.testC;
+    p_.fanLevelCount = (uint8_t)fan_.levelCount;
+    enterFanLevel(0);
+}
+
+void Sequence::enterFanLevel(int i) {
+    p_.phase = Phase::FanHold;
+    phaseT_ = levelT_ = t_;
+    p_.fanLevel = (uint8_t)i;
+    p_.fan = cfg_.fanLevels[i];
+    p_.cycle = 0, p_.cycleOf = 0;
+    blockT_ = t_, blockPv_ = blockU_ = 0, blockN_ = 0, prevBlockU_ = NAN;
+    satT_ = -1;
+    if (i == 0) {
+        arriveT_ = -1;
+        approach_ = 0;
+        stepT_ = -1;
+    } else {
+        arriveT_ = t_; // already at the held temperature
+        stepT_ = t_;
+        dipMin_ = 1e9f;
+        recovered_ = false;
+    }
+    addLog(p_.fan, 0);
+}
+
+void Sequence::pushTrend(float pv) {
+    trend_[trendI_] = pv;
+    trendI_ = (trendI_ + 1) % kTrendN;
+    if (trendN_ < kTrendN)
+        trendN_++;
+}
+
+// BT slope, C/s, over the last ~10 s (0 until enough samples).
+float Sequence::trendCps() const {
+    const int span = std::min(kTrendN - 1, std::max(1, (int)(10 / cfg_.dtSeconds)));
+    if (trendN_ <= span)
+        return 0;
+    const float now = trend_[(trendI_ + kTrendN - 1) % kTrendN];
+    const float then = trend_[(trendI_ + kTrendN - 1 - span) % kTrendN];
+    return (now - then) / (span * cfg_.dtSeconds);
+}
+
+// How far ahead to act on the trend: the heat path's delay, taken as twice the
+// dead time the points fitted (element plus probe lag), 15..60 s.
+float Sequence::leadS() const {
+    float dead = 0;
+    int n = 0;
+    for (int i = 0; i < cfg_.pointCount; i++)
+        if (std::isfinite(pts_[i].model.deadS) && pts_[i].model.deadS > 0)
+            dead += pts_[i].model.deadS, n++;
+    const float lead = n > 0 ? 2 * dead / n : 30;
+    return std::min(60.0f, std::max(15.0f, lead));
+}
+
+// Brings BT to tf without a large overshoot: coastOut until the trend projects
+// BT reaching tf within the lead time, then the expected hold until BT stops
+// moving toward tf or crosses it, then PI with the integrator at the hold.
+// Returns true once PI is running.
+bool Sequence::approach(float pv, float tf, float hold, float coastOut) {
+    if (approach_ >= 2) {
+        p_.output = hold_.update(tf, pv);
+        return true;
+    }
+    const float rate = trendCps();
+    const float ahead = pv + rate * leadS();
+    const bool above = pv > tf;
+    if (approach_ == 0) {
+        const bool near = std::fabs(pv - tf) <= kArriveC;
+        if (near || (above ? ahead <= tf : ahead >= tf))
+            approach_ = 1;
+    }
+    if (approach_ == 1) {
+        const bool settled = above ? (rate >= -0.02f || pv <= tf) : (rate <= 0.02f || pv >= tf);
+        if (settled || std::fabs(pv - tf) <= 0.5f) {
+            approach_ = 2;
+            hold_.reset(tf, pv, hold + rec_.kp * (tf - pv));
+            p_.output = hold_.update(tf, pv);
+            return true;
+        }
+        p_.output = hold;
+        return false;
+    }
+    p_.output = coastOut;
+    return false;
+}
+
+void Sequence::fanHoldStep(float pv) {
+    FanLevelResult& L = fan_.levels[p_.fanLevel];
+    const float tf = fan_.testC;
+    pushTrend(pv);
+    if (arriveT_ >= 0)
+        p_.output = hold_.update(tf, pv);
+    // Dip and recovery after the step into this level.
+    if (stepT_ >= 0 && !recovered_) {
+        dipMin_ = std::min(dipMin_, pv);
+        if (pv >= tf - kRecoverC && (tf - dipMin_ > kRecoverC || t_ - stepT_ > cfg_.fanBlockS)) {
+            recovered_ = true;
+            L.dipC = std::max(0.0f, tf - dipMin_);
+            L.recoveryS = tf - dipMin_ > kRecoverC ? t_ - stepT_ : 0;
+        }
+    }
+    if (arriveT_ < 0) {
+        // Falling from the top point: coast with the heater off, then give the
+        // hold the points measured (scaled to this temperature) before BT gets
+        // there, so the drum's momentum does not carry it far below.
+        if (approach(pv, tf, holdEstimate(), 0)) {
+            arriveT_ = t_;
+            blockT_ = t_, blockPv_ = blockU_ = 0, blockN_ = 0;
+        } else if (t_ - levelT_ > cfg_.fanApproachMaxS) {
+            finishFanTest(FanTestStatus::Failed, "no steady hold");
+            return;
+        }
+        return;
+    }
+    // Heater pinned at its maximum: this airflow takes more heat than the
+    // element gives at this temperature, so higher levels cannot be held either.
+    if (p_.output >= cfg_.outputMax - 0.01f) {
+        if (satT_ < 0)
+            satT_ = t_;
+        if (t_ - satT_ >= cfg_.fanSaturateS) {
+            enterShed();
+            return;
+        }
+    } else {
+        satT_ = -1;
+    }
+    blockPv_ += pv, blockU_ += p_.output, blockN_++;
+    if (t_ - blockT_ >= cfg_.fanBlockS && blockN_ > 0) {
+        const float pvMean = blockPv_ / blockN_, uMean = blockU_ / blockN_;
+        const bool steady = t_ - arriveT_ >= cfg_.fanSettleMinS && std::fabs(pvMean - tf) < cfg_.fanHoldBandC &&
+                            std::isfinite(prevBlockU_) && std::fabs(uMean - prevBlockU_) < cfg_.fanHoldDriftPct;
+        prevBlockU_ = uMean;
+        blockT_ = t_, blockPv_ = blockU_ = 0, blockN_ = 0;
+        p_.cycle++;
+        if (steady) {
+            // Heat loss scales with BT above ambient: quote the hold at tf.
+            const float rise = pvMean - fan_.ambientC;
+            L.holdPct = rise > 1 ? uMean * (tf - fan_.ambientC) / rise : uMean;
+            if (stepT_ >= 0 && !recovered_) // never fell more than the band
+                L.dipC = std::max(0.0f, tf - dipMin_), L.recoveryS = 0;
+            addLog(L.fanPct, L.holdPct);
+            if (p_.fanLevel + 1 < fan_.levelCount)
+                enterFanLevel(p_.fanLevel + 1);
+            else
+                enterShed();
+            return;
+        }
+    }
+    if (t_ - arriveT_ > cfg_.fanSettleMaxS) {
+        if (p_.fanLevel == 0) {
+            finishFanTest(FanTestStatus::Failed, "no steady hold");
+            return;
+        }
+        enterShed(); // keep the levels already measured
+    }
+}
+
+void Sequence::enterShed() {
+    p_.phase = Phase::FanShed;
+    phaseT_ = fanShedStartT_ = t_;
+    // From the highest level that held (BT is steady there now) down to the first.
+    int top = 0;
+    for (int i = 0; i < fan_.levelCount; i++)
+        if (std::isfinite(fan_.levels[i].holdPct))
+            top = i;
+    enterShedLevel(top);
+    shedOff_ = true; // already steady at this level: straight to the heater-off window
+    shedT_ = t_;
+}
+
+// Next level: hold the test temperature again at this fan before the window.
+void Sequence::enterShedLevel(int i) {
+    shedLevel_ = i;
+    p_.fanLevel = (uint8_t)i;
+    p_.fan = cfg_.fanLevels[i];
+    shedOff_ = false;
+    shedT_ = t_;
+    bandT_ = -1;
+    approach_ = 0;
+    sn_ = st_ = sp_ = stt_ = stp_ = 0;
+    addLog(p_.fan, 0);
+}
+
+void Sequence::fanShedStep(float pv) {
+    const float tf = fan_.testC;
+    pushTrend(pv);
+    if (!shedOff_) {
+        // Full heat back up, then this level's measured hold, then PI.
+        if (!approach(pv, tf, fan_.levels[shedLevel_].holdPct, cfg_.outputMax)) {
+            if (t_ - shedT_ > cfg_.fanSettleMaxS)
+                finishFanTest(FanTestStatus::Partial, "no steady hold");
+            return;
+        }
+        if (std::fabs(pv - tf) <= kReheatBandC) {
+            if (bandT_ < 0)
+                bandT_ = t_;
+        } else {
+            bandT_ = -1;
+        }
+        if (bandT_ >= 0 && t_ - bandT_ >= cfg_.fanReheatHoldS) {
+            shedOff_ = true;
+            shedT_ = t_;
+        } else if (t_ - shedT_ > cfg_.fanSettleMaxS) {
+            finishFanTest(FanTestStatus::Partial, "no steady hold");
+        }
+        return;
+    }
+    p_.output = 0;
+    const float into = t_ - shedT_;
+    if (into > cfg_.fanShedSkipS) {
+        const double x = into - cfg_.fanShedSkipS;
+        sn_ += 1, st_ += x, sp_ += pv, stt_ += x * x, stp_ += x * pv;
+    }
+    // Bounded fall: the drum stays in the roasting range.
+    const bool bound = pv < tf - cfg_.fanShedMaxDropC;
+    if (into < cfg_.fanShedSkipS + cfg_.fanShedWindowS && !bound)
+        return;
+    shedMeasure();
+    if (shedLevel_ == 0) {
+        finishFanTest(FanTestStatus::Ok, "");
+        return;
+    }
+    enterShedLevel(shedLevel_ - 1);
+}
+
+// Least-squares slope of BT over the window: the heater-off fall rate. With
+// Newton cooling dT/dt = -k (T - ambient), k from the slope at the window's
+// mean BT; the rate is then quoted at the test temperature.
+void Sequence::shedMeasure() {
+    FanLevelResult& L = fan_.levels[shedLevel_];
+    const double den = sn_ * stt_ - st_ * st_;
+    if (sn_ >= 20 && den > 0) {
+        const double slope = (sn_ * stp_ - st_ * sp_) / den; // C/s, negative
+        const float rise = (float)(sp_ / sn_) - fan_.ambientC;
+        if (slope < 0 && rise > 1) {
+            const float k = (float)(-slope) / rise;
+            L.tauS = 1 / k;
+            L.shedCpm = k * (fan_.testC - fan_.ambientC) * 60;
+        }
+    }
+    addLog(L.fanPct, std::isfinite(L.shedCpm) ? L.shedCpm : 0);
+}
+
+void Sequence::finishFanTest(FanTestStatus st, const char* why) {
+    const float rise = fan_.testC - fan_.ambientC;
+    int held = 0, shed = 0;
+    for (int i = 0; i < fan_.levelCount; i++) {
+        held += std::isfinite(fan_.levels[i].holdPct);
+        shed += std::isfinite(fan_.levels[i].shedCpm);
+    }
+    // Open-loop fan gain at a fixed heater: steady BT - ambient = heat in / loss
+    // conductance, and the hold heater is proportional to that conductance, so
+    // dBT/dfan = -(BT - ambient) * (dH/dfan) / H.
+    for (int i = 0; i < fan_.levelCount; i++) {
+        FanLevelResult& L = fan_.levels[i];
+        if (!std::isfinite(L.holdPct) || !(L.holdPct > 0))
+            continue;
+        int a = i > 0 && std::isfinite(fan_.levels[i - 1].holdPct) ? i - 1 : i;
+        int b = i + 1 < fan_.levelCount && std::isfinite(fan_.levels[i + 1].holdPct) ? i + 1 : i;
+        if (a == b)
+            continue;
+        const float dh = fan_.levels[b].holdPct - fan_.levels[a].holdPct;
+        const float df = fan_.levels[b].fanPct - fan_.levels[a].fanPct;
+        if (df > 0)
+            L.gainCPerPct = -rise * (dh / df) / L.holdPct;
+    }
+    if (st == FanTestStatus::Ok && (held < fan_.levelCount || shed < fan_.levelCount))
+        st = held >= 2 ? FanTestStatus::Partial : FanTestStatus::Failed;
+    if (st == FanTestStatus::Partial && held < 2)
+        st = FanTestStatus::Failed;
+    if (st == FanTestStatus::Failed && !*why)
+        why = "too few levels";
+    fan_.status = st;
+    fan_.failure = why;
+    fan_.durationS = t_ - fanStartT_;
+    p_.fan = NAN;
     p_.output = 0;
     p_.remainingS = 0;
     p_.phase = Phase::Done;

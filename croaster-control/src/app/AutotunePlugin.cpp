@@ -38,10 +38,15 @@ String AutotunePlugin::report() {
     t.et = s.et;
     t.bt = s.bt;
     const float pv = selectPidInput(s.pidInput, t); // uncorrected; close enough for an estimate
+    controller_.roasterModel(model_);
+    const float estimate = autotune::Sequence::estimateSeconds(plan, pv);
+    autotune::Config noFan = plan;
+    noFan.fanTest = false;
+    const float fanPart = estimate - autotune::Sequence::estimateSeconds(noFan, pv);
     JsonDocument doc;
     doc["command"] = "getAutotune";
-    autotuneproto::writeReport(s, report_, plan, autotune::Sequence::estimateSeconds(plan, pv), unit(),
-                               doc["response"].to<JsonObject>());
+    autotuneproto::writeReport(s, report_, plan, estimate, unit(), doc["response"].to<JsonObject>(),
+                               roastermodel::usable(model_) ? &model_ : nullptr, heaterMaxPct_, fanPart);
     String out;
     serializeJson(doc, out);
     return out;

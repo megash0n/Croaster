@@ -14,9 +14,12 @@ class CroasterApp;
 
 class AutotunePlugin {
 public:
-    AutotunePlugin(Controller& controller, ControlPlugin& control)
+    // heaterMaxPct: the heater ceiling (CPID_HEATER_MAX_PERCENT), for the
+    // recipe editor's rate-of-rise check.
+    AutotunePlugin(Controller& controller, ControlPlugin& control, float heaterMaxPct)
         : controller_(controller)
-        , control_(control) {}
+        , control_(control)
+        , heaterMaxPct_(heaterMaxPct) {}
 
     // Registers getAutotune and {"autotune":"apply"|"discard"}. Call before app.begin().
     void attach(CroasterApp& app);
@@ -30,6 +33,8 @@ private:
     Controller& controller_;
     ControlPlugin& control_;
     CroasterApp* app_ = nullptr;
+    float heaterMaxPct_;
     autotune::Report report_; // static storage: about 1 KB, kept off the loop task stack
+    roastermodel::RoasterModel model_;
     uint32_t statusSeq_ = 0;
 };

@@ -19,7 +19,7 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 | `boards/esp32s3-monitor/` | Croaster monitor (same S3 N16R8 hardware, D26): 2× MAX31855 or MAX6675 + OLED, no heater, fan or control task; `src/config.h` (`CMON_` only) + `ConfigCheck.h` |
 | `croaster-control/` | Control add-on lib `CroasterControl` (D1). `src/core/`: pure logic (PID, multi-point autotune `autotune_sequence` + `autotune_protocol` and the older single-point relay, profiles, profile library format, recipe runner, MAX31855/MAX6675 decode, command protocol, safety rules), host tests in `boards/esp32s3-pid/test` (`pio test -e native`). `src/hw/`: ESP32 drivers (thermocouple SPI, SSR, dimmer/PWM fan) and `esp32s3_opi_pins.h` (ESP32-S3 octal-PSRAM pin rules both boards' `ConfigCheck.h` use). `src/app/`: control task, NVS settings, `ControlPlugin` (hooks into `CroasterApp`), `LibraryPlugin` + `library_storage` (profile library on LittleFS), `RecipePlugin` (recipe commands and tick), `AutotunePlugin` (`getAutotune`, apply/discard), `RoasterProbe` (Croaster PID) and `MonitorProbes` (Croaster monitor). `build_filter.py` limits native builds to `src/core` |
 | `croaster-webui/` | Browser UI lib `CroasterWebUi` (D27): `web/` page sources (`theme.js` colour schemes, T50), `embed_assets.py` (library extra script, gzips `web/` into the committed `src/webui_assets.h`), `src/WebUiServer` (ESP-IDF `esp_http_server` on `CMON_WEBUI_PORT`), host tests in `test/` (node + python) |
-| `docs/` | `design.md` (architecture + decisions D1–D29), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source) |
+| `docs/` | `design.md` (architecture + decisions D1–D30), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules, fan test), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source) |
 | `tools/` | Build helpers: `force_include_deps.py` (pre: extra script; force-included `config.h` as a rebuild dependency, T47) |
 | `builds/` | gitignored firmware output of `./build_all.sh` |
 
@@ -55,7 +55,7 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   (`controlproto`): nested `{"command":{...}}` and yaeger's named commands
   `setBurner`/`setFan`/`setPreferences`/`getPreferences` (`parseLegacy`, via
   `onCommand`). yaeger's flat keys (`{"BurnerVal":60}`) are not accepted (D8).
-  Data adds `BurnerVal`, `FanVal`, `SV`, `Mode`, `trip`, `autotune`, `Amb`,
+  Data adds `BurnerVal`, `FanVal`, `FanAssist`, `SV`, `Mode`, `trip`, `autotune`, `Amb`,
   `Target`, `pidKp/Ki/Kd`, `wifiStrength`.
 - Autotune status (D17): the controller records an `AutotuneStatus` and reason
   in the snapshot; `core/autotune_status.h` turns it into text in the
@@ -72,6 +72,14 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `"discard"`; `getAutotune` returns plan, progress, results and log; data
   adds `atTarget`. Refused while a recipe runs (`recipeRunning`), and
   `recipeStart` is refused during autotune (`autotuneRunning`).
+- Autotune fan test (D30, `docs/autotune/fan-test.md`): optional, on by
+  default, after the points; holds the middle point at fan 30/60/90 % and
+  times a bounded heater-off fall per level. Saved with the gains as a
+  versioned roaster model (NVS `model`). The controller uses it for fan and
+  ramp feedforward and for fan assist (extra fan when BT is above the
+  setpoint with the heater at 0 %, never below the user's fan; NVS `fanAs`;
+  data `FanAssist`). The controller keeps the user's or recipe's fan as the
+  base fan (`fanBase_`); only outside fan changes abort autotune (D23).
 - PID input defaults to BT (D18, `CPID_PID_INPUT`); `pidInput` command and
   NVS key `in` still switch it, and a saved value overrides the default.
   Without a BT probe, PID mode trips `sensor`: send `pidInput` ET. Default

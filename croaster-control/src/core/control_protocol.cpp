@@ -8,7 +8,7 @@
 namespace controlproto {
 
 const char* const kNestedKeys[] = {"burner", "fan",         "setpoint", "mode",    "pidInput",
-                                   "pid",    "cooldownFan", "profile",  "watchdog"};
+                                   "pid",    "cooldownFan", "profile",  "watchdog", "fanAssist"};
 const size_t kNestedKeyCount = sizeof(kNestedKeys) / sizeof(kNestedKeys[0]);
 const char* const kBasicNames[] = {"startProfile", "stop", "autotune", "clearTrip", "getControl"};
 const size_t kBasicNameCount = sizeof(kBasicNames) / sizeof(kBasicNames[0]);
@@ -120,6 +120,11 @@ Parsed parseNested(JsonObjectConst c, char unit, const char* only) {
             }
         }
     }
+    if (want("fanAssist") && c["fanAssist"].is<bool>()) {
+        p.hasFanAssist = true;
+        p.fanAssist = c["fanAssist"].as<bool>();
+        add(p, Command::Kind::SetFanAssist, p.fanAssist ? 1.0f : 0.0f);
+    }
     if (want("profile") && !c["profile"].isNull()) {
         p.hasProfile = p.profile.loadJson(c["profile"].as<JsonArrayConst>(), unit);
         p.profileError = !p.hasProfile;
@@ -145,13 +150,15 @@ Parsed parseLegacy(JsonObjectConst m) {
     return p;
 }
 
-bool basicCommand(const char* name, Command& out) {
+bool basicCommand(const char* name, Command& out, JsonObjectConst msg) {
     if (eq(name, "startProfile"))
         out = Command{Command::Kind::StartProfile};
     else if (eq(name, "stop"))
         out = Command{Command::Kind::Stop};
-    else if (eq(name, "autotune"))
+    else if (eq(name, "autotune")) {
         out = Command{Command::Kind::StartAutotune};
+        out.a = msg["fanTest"].is<bool>() ? (msg["fanTest"].as<bool>() ? 1.0f : 0.0f) : NAN;
+    }
     else if (eq(name, "clearTrip"))
         out = Command{Command::Kind::ClearTrip};
     else
@@ -162,6 +169,7 @@ bool basicCommand(const char* name, Command& out) {
 void writeDataFields(const Snapshot& s, char unit, JsonObject d) {
     putNum(d["BurnerVal"], s.heaterPct);
     putNum(d["FanVal"], s.fanPct);
+    putNum(d["FanAssist"], s.fanAssistPct); // part of FanVal added by fan assist
     putNum(d["SV"], fromCelsius(s.setpoint, unit));
     d["Mode"] = modeName(s.mode);
     d["trip"] = tripName(s.trip);
@@ -208,6 +216,10 @@ void writeControlInfo(const Snapshot& s, const CooldownFan& cooldownFan, const W
     o["tuned"] = s.gainsTuned;
     o["trip"] = tripName(s.trip);
     o["mainsOk"] = s.mainsOk;
+    JsonObject fa = o["fanAssist"].to<JsonObject>();
+    fa["enabled"] = s.fanAssistOn;
+    fa["available"] = s.fanTested; // acts only with a saved fan test
+    putNum(fa["extra"], s.fanAssistPct);
     putNum(o["profileElapsed"], s.profileElapsedS, 1.0f);
     putNum(o["ambient"], fromCelsius(s.ambient, unit));
 }

@@ -11,7 +11,8 @@
 namespace autotunetext {
 
 // Telemetry and getControl: "idle", "running: heating to 350 F (2/3)",
-// "running: cycle 3/6 at 350 F (2/3)", "results ready", "done", "discarded",
+// "running: cycle 3/6 at 350 F (2/3)", "running: fan test 60 % at 300 F (2/3)",
+// "running: fan test shed 60 %", "results ready", "done", "discarded",
 // "failed: no oscillation", "aborted", "aborted: setpoint changed",
 // "need a valid probe", "autotune required".
 inline void full(const Snapshot& s, char unit, char* out, size_t n) {
@@ -33,6 +34,13 @@ inline void full(const Snapshot& s, char unit, char* out, size_t n) {
             break;
         case autotune::Phase::Computing:
             snprintf(out, n, "running: computing (%d/%d)", i, k);
+            break;
+        case autotune::Phase::FanHold:
+            snprintf(out, n, "running: fan test %.0f %% at %.0f %c (%d/%d)", p.fan, t, unit, p.fanLevel + 1,
+                     p.fanLevelCount);
+            break;
+        case autotune::Phase::FanShed:
+            snprintf(out, n, "running: fan test shed %.0f %%", p.fan);
             break;
         default:
             snprintf(out, n, "running");
@@ -70,7 +78,7 @@ inline void full(const Snapshot& s, char unit, char* out, size_t n) {
 }
 
 // OLED header, at most 20 characters: "AT2/3 heat 350F",
-// "AT2/3 cyc3/6 350F", "AT results ready", "AT discarded", "AT done",
+// "AT2/3 cyc3/6 350F", "AT fan 60% 300F", "AT fan shed 60%", "AT results ready", "AT discarded", "AT done",
 // "AT fail: timeout", "AT aborted", "AT: SV<212F", "AT: no probe",
 // "Autotune first".
 inline void brief(const Snapshot& s, char unit, char* out, size_t n) {
@@ -112,6 +120,12 @@ inline void brief(const Snapshot& s, char unit, char* out, size_t n) {
             break;
         case autotune::Phase::Computing:
             snprintf(line, sizeof line, "AT%d/%d computing", i, k);
+            break;
+        case autotune::Phase::FanHold:
+            snprintf(line, sizeof line, "AT fan %.0f%% %.0f%c", p.fan, t, unit);
+            break;
+        case autotune::Phase::FanShed:
+            snprintf(line, sizeof line, "AT fan shed %.0f%%", p.fan);
             break;
         default:
             snprintf(line, sizeof line, "AT running");

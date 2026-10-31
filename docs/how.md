@@ -65,12 +65,21 @@ flowchart TD
     E -- Manual --> F[heater = your %]
     E -- PID --> G[PID: setpoint vs ET/BT/MAX -> heater %]
     E -- Profile --> H[setpoint from profile step -> PID]
-    E -- Tuning --> I[relay autotune -> heater on/off]
-    F & G & H & I --> J[safety: over-temp, probe fault, no mains, OTA]
+    E -- Tuning --> I[autotune: relay per point, then fan test levels]
+    G & H --> FF[feedforward from the saved model: fan, setpoint slope]
+    F & FF & I --> FA[fan: base, or fan test level, plus fan assist]
+    FA --> J[safety: over-temp, probe fault, no mains, OTA]
     J --> K[limit heater to 90 %; fan >= 30 % while heating]
     K --> L[SSR time-proportional window + fan dimmer]
     L --> M[publish snapshot]
 ```
+
+In PID and Profile the heater also gets feedforward from the roaster model
+autotune saved: the extra heat the current fan speed needs, and the heat a
+moving setpoint needs. The fan is the user's or recipe's value (the base),
+the fan test's level during autotune, or the base plus fan assist when BT
+runs above the setpoint with the heater already off
+(`docs/autotune/fan-test.md`).
 
 The SSR is a zero-cross type, so it can only switch at whole mains
 half-cycles. Instead of fast PWM, heater % becomes "on for X ms out of each
@@ -236,7 +245,8 @@ settings; see the board README, "Comms watchdog".
 | `croaster-control/src/core/` | Pure logic: PID, autotune, profiles, protocol, MAX31855 decoding, probe fault filter, safety rules. The only part the host tests compile |
 | `croaster-control/src/app/controller.*` | The control task |
 | `croaster-control/src/app/ControlPlugin.*` | Commands, data fields, watchdog |
-| `croaster-control/src/app/config_store.*` | NVS settings (gains, PID input, cooldown fan, watchdog) |
+| `croaster-control/src/app/config_store.*` | NVS settings (gains, PID input, cooldown fan, watchdog, roaster model, fan assist) |
+| `croaster-control/src/core/roaster_model.*`, `core/fan_assist.*` | Roaster model from autotune (feedforward, rate-of-rise limit) and fan assist (pure, host tested) |
 | `croaster-control/src/hw/` | SSR, dimmer, PWM fan, thermocouple bus |
 | `croaster-control/src/app/unit_store.*`, `core/temp_unit.h` | Saved temperature unit (NVS `croaster`/`unit`) |
 | `croaster-control/src/core/recipe.*` | Recipe format, parser, roast clock and step runner (pure, host tested) |

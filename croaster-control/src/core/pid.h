@@ -6,7 +6,9 @@
 //    with a first-order low-pass on the derivative,
 //  - integrator held in output units and frozen while saturated (legacy clamped
 //    the raw error-integral to 72 C*s, which capped the I term at Ki*72),
-//  - bumpless transfer via reset().
+//  - bumpless transfer via reset(),
+//  - optional feedforward `ff` (heater %) added to the output; the integrator
+//    carries only what the feedforward does not predict.
 struct PidGains {
     float kp = 0, ki = 0, kd = 0;
 };
@@ -30,10 +32,11 @@ public:
     }
 
     // Call exactly once per dtSeconds. Returns output clamped to [outMin, outMax].
-    float update(float setpoint, float measurement);
+    float update(float setpoint, float measurement, float ff = 0);
 
-    // Prime state so the next update() continues smoothly from `currentOutput`.
-    void reset(float setpoint, float measurement, float currentOutput);
+    // Prime state so the next update() continues smoothly from `currentOutput`
+    // (pass the feedforward that update() will get).
+    void reset(float setpoint, float measurement, float currentOutput, float ff = 0);
 
     float integralTerm() const {
         return iTerm_;
@@ -42,6 +45,11 @@ public:
 private:
     float clamp(float v) const {
         return v < cfg_.outMin ? cfg_.outMin : (v > cfg_.outMax ? cfg_.outMax : v);
+    }
+    // The integrator's range shifts with the feedforward so their sum spans the output range.
+    float clampI(float v, float ff) const {
+        const float lo = cfg_.outMin - ff, hi = cfg_.outMax - ff;
+        return v < lo ? lo : (v > hi ? hi : v);
     }
     Config cfg_;
     PidGains g_;

@@ -76,6 +76,18 @@ void logText(const autotune::LogEntry& e, const autotune::Report& r, char unit, 
             snprintf(out, n, "point %d: Ku %.3g, Tu %.0f s (%s)", pt, e.a, e.b,
                      autotune::pointStatusName(r.points[e.point].status));
         break;
+    case Phase::FanHold:
+        if (e.b == 0)
+            snprintf(out, n, "fan test: hold at fan %.0f %%", e.a);
+        else
+            snprintf(out, n, "fan test: fan %.0f %% holds with heater %.1f %%", e.a, e.b);
+        break;
+    case Phase::FanShed:
+        if (e.b == 0)
+            snprintf(out, n, "fan test: heat-shed check at fan %.0f %%", e.a);
+        else
+            snprintf(out, n, "fan test: fan %.0f %% sheds %.1f %c/min", e.a, delta(e.b, unit), unit);
+        break;
     case Phase::Done:
         snprintf(out, n, "done: Kp %.3g, Ki %.3g", e.a, e.b);
         break;
@@ -92,7 +104,8 @@ void logText(const autotune::LogEntry& e, const autotune::Report& r, char unit, 
 }
 
 void writeReport(const Snapshot& s, const autotune::Report& r, const autotune::Config& plan, float estimateS,
-                 char unit, JsonObject o) {
+                 char unit, JsonObject o, const roastermodel::RoasterModel* saved, float heaterMaxPct,
+                 float fanEstimateS) {
     char text[64];
     autotunetext::full(s, unit, text, sizeof text);
     o["status"] = text;
@@ -115,6 +128,18 @@ void writeReport(const Snapshot& s, const autotune::Report& r, const autotune::C
     pl["rule"] = autotune::ruleName(plan.rule);
     putNum(pl["estimate"], estimateS, 1.0f);
     putNum(pl["timeLimit"], plan.totalTimeoutS, 1.0f);
+    pl["fanTest"] = plan.fanTest && plan.fanLevelCount > 0;
+    JsonArray fl = pl["fanLevels"].to<JsonArray>();
+    for (int i = 0; i < plan.fanLevelCount && i < autotune::kMaxFanLevels; i++)
+        fl.add(plan.fanLevels[i]);
+    {
+        const float tf = plan.fanTestC > 0 ? plan.fanTestC
+                         : plan.pointCount > 0 ? plan.pointsC[(plan.pointCount - 1) / 2]
+                                               : NAN;
+        putNum(pl["fanTarget"], fromCelsius(tf, unit), 1.0f);
+    }
+    putNum(pl["fanTimeLimit"], plan.fanTimeoutS, 1.0f);
+    putNum(pl["fanEstimate"], fanEstimateS, 1.0f);
 
     if (running) {
         const autotune::Progress& p = s.autotuneProgress;
@@ -123,6 +148,9 @@ void writeReport(const Snapshot& s, const autotune::Report& r, const autotune::C
         g["points"] = p.pointCount;
         g["cycle"] = p.cycle;
         g["cycleOf"] = p.cycleOf;
+        g["fanLevel"] = p.fanLevel;
+        g["fanLevels"] = p.fanLevelCount;
+        putNum(g["fan"], p.fan, 1.0f);
         putNum(g["target"], fromCelsius(p.targetC, unit));
         putNum(g["output"], p.output);
         putNum(g["amplitude"], delta(p.amplitudeC, unit));
@@ -170,12 +198,69 @@ void writeReport(const Snapshot& s, const autotune::Report& r, const autotune::C
         rec["rule"] = autotune::ruleName(r.rule);
     }
 
+    const autotune::FanTestResult& f = r.fan;
+    if (f.status != autotune::FanTestStatus::Skipped) {
+        JsonObject ft = o["fanTest"].to<JsonObject>();
+        ft["status"] = autotune::fanTestStatusName(f.status);
+        ft["failure"] = f.failure;
+        ft["channel"] = f.channel == 0 ? "exhaust" : "second";
+        putNum(ft["target"], fromCelsius(f.testC, unit), 1.0f);
+        putNum(ft["duration"], f.durationS, 1.0f);
+        JsonArray lv = ft["levels"].to<JsonArray>();
+        for (int i = 0; i < f.levelCount; i++) {
+            const autotune::FanLevelResult& L = f.levels[i];
+            JsonObject e = lv.add<JsonObject>();
+            putNum(e["fan"], L.fanPct, 1.0f);
+            putNum(e["hold"], L.holdPct);
+            putNum(e["dip"], delta(L.dipC, unit));
+            putNum(e["recovery"], L.recoveryS, 1.0f);
+            putSig(e["gain"], delta(L.gainCPerPct, unit));
+            putNum(e["tau"], L.tauS, 1.0f);
+            putNum(e["shed"], delta(L.shedCpm, unit));
+        }
+    }
+    if (saved)
+        writeSaved(*saved, heaterMaxPct, unit, o["saved"].to<JsonObject>());
+    else
+        o["saved"] = nullptr;
+
     JsonArray log = o["log"].to<JsonArray>();
     for (int i = 0; i < r.logCount; i++) {
         JsonObject e = log.add<JsonObject>();
         putNum(e["t"], r.log[i].tS, 1.0f);
         logText(r.log[i], r, unit, text, sizeof text);
         e["text"] = text;
+    }
+}
+
+void writeSaved(const roastermodel::RoasterModel& m, float heaterMaxPct, char unit, JsonObject o) {
+    putNum(o["ambient"], fromCelsius(m.ambientC, unit));
+    putNum(o["runFan"], m.runFanPct, 1.0f);
+    putNum(o["heaterMax"], heaterMaxPct, 1.0f);
+    JsonArray pts = o["points"].to<JsonArray>();
+    for (int i = 0; i < m.pointCount && i < roastermodel::kMaxPoints; i++) {
+        const roastermodel::PointModel& p = m.points[i];
+        if (!std::isfinite(p.gainCPerPct))
+            continue;
+        JsonObject e = pts.add<JsonObject>();
+        putNum(e["target"], fromCelsius(p.targetC, unit));
+        putSig(e["gain"], delta(p.gainCPerPct, unit));
+        putNum(e["tau"], p.tauS, 1.0f);
+        putNum(e["hold"], p.holdPct);
+    }
+    const roastermodel::FanModel& f = m.fan[0];
+    if (!f.valid) {
+        o["fan"] = nullptr;
+        return;
+    }
+    JsonObject fo = o["fan"].to<JsonObject>();
+    putNum(fo["target"], fromCelsius(f.testC, unit));
+    JsonArray lv = fo["levels"].to<JsonArray>();
+    for (int i = 0; i < f.levelCount; i++) {
+        JsonObject e = lv.add<JsonObject>();
+        putNum(e["fan"], f.levels[i].fanPct, 1.0f);
+        putNum(e["hold"], f.levels[i].holdPct);
+        putNum(e["shed"], delta(f.levels[i].shedCpm, unit));
     }
 }
 

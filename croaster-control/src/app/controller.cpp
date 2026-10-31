@@ -8,6 +8,7 @@
 void Controller::begin(const PidGains& gains, bool gainsTuned, PidInput input, float tripFanPct, int core,
                        UBaseType_t prio) {
     tripFan_ = tripFanPct;
+    fanBase_ = fan_.get();
     pid_.setGains(gains);
     st_.gains = gains;
     st_.gainsTuned = gainsTuned;
@@ -45,6 +46,36 @@ void Controller::configureAutotune(const autotune::Config& c) {
     // Fail inside the sequence (a clear reason) before the over-temperature trip.
     atCfg_.abortAboveC = fminf(c.abortAboveC, lim_.overTempC - 5);
     autotune::makePlan(c.pointsC, c.pointCount, kAutotuneMinSetpointC, lim_.maxSetpointC, atCfg_);
+    autotune::makeFanLevels(atCfg_);
+}
+
+void Controller::configureModelUse(const ModelUse& u) {
+    use_ = u;
+}
+
+void Controller::setRoasterModel(const roastermodel::RoasterModel& m) {
+    model_ = roastermodel::usable(m) ? m : roastermodel::RoasterModel{};
+    modelPublished_ = model_;
+}
+
+void Controller::roasterModel(roastermodel::RoasterModel& out) const {
+    portENTER_CRITICAL(&mux_);
+    out = modelPublished_;
+    portEXIT_CRITICAL(&mux_);
+}
+
+float Controller::feedforward(float sp) const {
+    float ff = 0;
+    if (use_.fanFeedforward)
+        ff += roastermodel::fanFeedforward(model_, fanBase_, sp);
+    if (use_.rampFeedforward)
+        ff += roastermodel::rampFeedforward(model_, sp, fanBase_, spSlope_.value());
+    return ff;
+}
+
+void Controller::setBaseFan(float pct) {
+    fanBase_ = fmaxf(0, fminf(pct, 100));
+    fan_.set(fanBase_ + assist_.extra());
 }
 
 void Controller::autotuneReport(autotune::Report& out) const {
@@ -83,7 +114,7 @@ void Controller::handlePvStep(float newPv, const char* abortReason) {
         break;
     case PvStepAction::ResetPid:
         if (std::isfinite(newPv))
-            pid_.reset(st_.setpoint, newPv, heater_.requested());
+            pid_.reset(st_.setpoint, newPv, heater_.requested(), feedforward(st_.setpoint));
         break;
     default:
         break;
@@ -95,13 +126,18 @@ void Controller::setMode(Mode m, float pv, const char* abortReason) {
     const float carry = startOutputOnModeChange(st_.mode, m, heater_.requested());
     if (m == Mode::Pid || m == Mode::Profile) {
         if (st_.mode == Mode::Manual || st_.mode == Mode::Autotune)
-            pid_.reset(st_.setpoint, pv, carry);
+            pid_.reset(st_.setpoint, pv, carry, feedforward(st_.setpoint));
     }
     if (m == Mode::Manual)
         manualHeater_ = carry;
     if (leavingAutotune && autotune_.running()) {
         autotune_.abort(*abortReason ? abortReason : "stopped");
-        setAutotuneStatus(AutotuneStatus::Aborted, abortReason);
+        if (autotune_.phase() == autotune::Phase::Done) { // stopped in the fan test: the gains wait for a choice
+            st_.autotunePending = true;
+            setAutotuneStatus(AutotuneStatus::Pending);
+        } else {
+            setAutotuneStatus(AutotuneStatus::Aborted, abortReason);
+        }
     }
     st_.mode = m;
 }
@@ -119,7 +155,7 @@ void Controller::apply(const Command& c) {
     if (c.kind == Command::Kind::SetHeater || c.kind == Command::Kind::SetMode ||
         c.kind == Command::Kind::StartProfile || c.kind == Command::Kind::StartAutotune)
         st_.trip = SafetyTrip::None;
-    if (const char* why = outputCommandStopsAutotune(st_.mode, c.kind, c.a, fan_.get())) {
+    if (const char* why = outputCommandStopsAutotune(st_.mode, c.kind, c.a, fanBase_)) {
         setMode(Mode::Manual, pv, why); // heater 0
         if (c.kind == Command::Kind::SetHeater)
             return; // stays off: the command only stops autotune
@@ -129,7 +165,10 @@ void Controller::apply(const Command& c) {
         manualHeater_ = c.a;
         break; // used in Manual mode
     case Command::Kind::SetFan:
-        fan_.set(c.a);
+        if (st_.mode == Mode::Autotune)
+            fanBase_ = fmaxf(0, fminf(c.a, 100)); // same value (else stopped above); the fan test owns the output
+        else
+            setBaseFan(c.a);
         break;
     case Command::Kind::SetSetpoint: {
         const float prev = st_.setpoint;
@@ -142,7 +181,7 @@ void Controller::apply(const Command& c) {
         // legacy Control::setSetpoint: going from 0 to a real setpoint clears the
         // PID history so it starts from zero output, not from stale state.
         if (prev <= 0 && st_.setpoint > 0 && st_.mode == Mode::Pid)
-            pid_.reset(st_.setpoint, pv, 0);
+            pid_.reset(st_.setpoint, pv, 0, feedforward(st_.setpoint));
         break;
     }
     case Command::Kind::SetMode: {
@@ -174,10 +213,13 @@ void Controller::apply(const Command& c) {
             setAutotuneStatus(AutotuneStatus::NeedProbe);
             break;
         }
-        if (fan_.get() < 30)
-            fan_.set(60); // legacy CommandLoop behaviour
+        if (fanBase_ < 30)
+            setBaseFan(60); // legacy CommandLoop behaviour
         st_.autotunePending = false; // a new run replaces unapplied results
-        autotune_.start(atCfg_, pv);
+        autotune::Config run = atCfg_;
+        if (std::isfinite(c.a))
+            run.fanTest = c.a != 0;
+        autotune_.start(run, pv, fanBase_);
         if (!autotune_.running()) {
             setAutotuneStatus(AutotuneStatus::Failed, autotune_.failure());
             break;
@@ -194,6 +236,11 @@ void Controller::apply(const Command& c) {
         st_.gains = autotune_.recommended();
         pid_.setGains(st_.gains);
         st_.gainsTuned = true;
+        autotune_.fillReport(scratchReport_);
+        model_ = roastermodel::merge(model_, roastermodel::fromReport(scratchReport_, autotune_.fanResult().startFanPct));
+        portENTER_CRITICAL(&mux_);
+        modelPublished_ = model_;
+        portEXIT_CRITICAL(&mux_);
         st_.autotuneSeq++; // ControlPlugin saves the gains to NVS
         st_.autotunePending = false;
         setAutotuneStatus(AutotuneStatus::Done);
@@ -229,7 +276,8 @@ void Controller::apply(const Command& c) {
         manualHeater_ = 0;
         setMode(Mode::Manual, pv);
         manualHeater_ = 0;
-        fan_.set(100);
+        assist_.reset();
+        setBaseFan(100);
         break;
     case Command::Kind::SetTripFan:
         tripFan_ = c.a;
@@ -242,6 +290,9 @@ void Controller::apply(const Command& c) {
         handlePvStep(pidInput(last_), "correction changed");
         break;
     }
+    case Command::Kind::SetFanAssist:
+        use_.fanAssist = c.a != 0;
+        break;
     case Command::Kind::Trip:
         st_.trip = static_cast<SafetyTrip>(static_cast<int>(c.a));
         manualHeater_ = 0;
@@ -260,7 +311,8 @@ void Controller::controlStep(uint32_t now) {
         out = manualHeater_;
         break;
     case Mode::Pid:
-        out = pid_.update(st_.setpoint, pv);
+        spSlope_.update(st_.setpoint, pidCfg().dtSeconds); // a recipe ramp moves the setpoint
+        out = pid_.update(st_.setpoint, pv, feedforward(st_.setpoint));
         break;
     case Mode::Profile: {
         st_.profileElapsedS = (now - profileStartMs_) / 1000.0f;
@@ -268,8 +320,9 @@ void Controller::controlStep(uint32_t now) {
         // NaN would pass fminf as maxSetpointC; treat it as 0 (heater off) instead.
         st_.setpoint = std::isfinite(t.setpointC) ? fmaxf(0, fminf(t.setpointC, lim_.maxSetpointC)) : 0;
         if (std::isfinite(t.fanPct))
-            fan_.set(t.fanPct);
-        out = pid_.update(st_.setpoint, pv);
+            fanBase_ = fmaxf(0, fminf(t.fanPct, 100));
+        spSlope_.update(st_.setpoint, pidCfg().dtSeconds);
+        out = pid_.update(st_.setpoint, pv, feedforward(st_.setpoint));
         break;
     }
     case Mode::Autotune:
@@ -290,9 +343,41 @@ void Controller::controlStep(uint32_t now) {
         break;
     }
 
+    if (st_.mode != Mode::Pid && st_.mode != Mode::Profile)
+        spSlope_.reset();
+
+    // ---- fan: the fan test's level, or the base fan plus fan assist ----
+    const float testFan = st_.mode == Mode::Autotune ? autotune_.fanRequest() : NAN;
+    if (std::isfinite(testFan)) {
+        assist_.reset();
+        fan_.set(testFan);
+        testFanOut_ = true;
+    } else {
+        if (testFanOut_)
+            fan_.set(fanBase_); // fan test over or stopped: back to the operator's fan
+        testFanOut_ = false;
+        fanassist::Settings as = use_.assist;
+        as.enabled = use_.fanAssist && model_.fan[0].valid;
+        fanassist::Inputs in;
+        in.mode = st_.mode;
+        in.trip = st_.trip;
+        in.btC = pv;
+        in.setpointC = st_.setpoint;
+        in.heaterPct = out;
+        in.baseFanPct = fanBase_;
+        const float before = assist_.extra();
+        const float extra = assist_.update(as, in, pidCfg().dtSeconds);
+        // Only while assist is (or was) active, so the base fan the operator set
+        // is not rewritten every step (a trip's fan stays until a command).
+        if (extra > 0 || before > 0 || st_.mode == Mode::Autotune || st_.mode == Mode::Profile)
+            fan_.set(fanBase_ + extra);
+    }
+
     // ---- safety interlocks (order matters: last one wins) ----
     if (overTemperature(last_, correction_, lim_.overTempC)) {
         st_.trip = SafetyTrip::OverTemp;
+        assist_.reset();
+        fanBase_ = 100;
         fan_.set(100);
     }
 
@@ -317,22 +402,32 @@ void Controller::controlStep(uint32_t now) {
         tripFanApplied_ = false;
     } else {
         // Once per trip, so a fan command while tripped still takes effect.
-        if (!tripFanApplied_)
-            fan_.set(st_.trip == SafetyTrip::OverTemp ? 100 : tripFan_);
+        if (!tripFanApplied_) {
+            assist_.reset();
+            fanBase_ = st_.trip == SafetyTrip::OverTemp ? 100 : tripFan_;
+            fan_.set(fanBase_);
+        }
         tripFanApplied_ = true;
         out = 0;
         if (st_.mode != Mode::Manual)
             setMode(Mode::Manual, pv, tripName(st_.trip));
         manualHeater_ = 0;
     }
-    if (out > 0 && fan_.get() < lim_.minFanWithHeat)
+    if (out > 0 && fan_.get() < lim_.minFanWithHeat) {
         fan_.set(lim_.minFanWithHeat);
+        if (!std::isfinite(testFan))
+            fanBase_ = fmaxf(fanBase_, lim_.minFanWithHeat);
+    }
     heater_.set(out);
 
     // ---- publish ----
     publishProbes(last_, st_); // uncorrected: CroasterCore adds the correction itself
     st_.heaterPct = heater_.requested();
     st_.fanPct = fan_.get();
+    st_.fanBasePct = fanBase_;
+    st_.fanAssistPct = assist_.extra();
+    st_.fanAssistOn = use_.fanAssist;
+    st_.fanTested = model_.fan[0].valid;
     st_.uptimeMs = now;
     st_.autotuneProgress = autotune_.progress();
     // The report (about 1 KB) is copied only when the sequence logged something.

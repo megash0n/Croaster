@@ -60,7 +60,7 @@ private:
     String handleLegacy(const JsonObject& json, const char* name);
     // Submits the parsed commands and persists gains / PID input / cooldown fan.
     void apply(const controlproto::Parsed& p);
-    String handleBasic(const char* name);
+    String handleBasic(const char* name, const JsonObject& json);
     char unit() const;
 
     Controller& controller_;

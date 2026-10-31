@@ -8,7 +8,13 @@
 // from the describing function, a first-order-plus-dead-time model from Ku, Tu
 // and the relay bias, and gains from the configured rule. The recommended set
 // is the conservative envelope of the per-point sets (tuning-rules.md).
+// Optional fan test after the points (docs/autotune/fan-test.md): at one held
+// temperature the fan steps through a few levels; at each the sequence records
+// the heater needed to hold BT, the BT dip and recovery after the step, and,
+// with the heater off, how fast airflow sheds heat from the drum and beans.
+// The caller applies fanRequest() while it is finite.
 // Pure (no Arduino), so it is host-tested.
+#include <cmath>
 #include <cstdint>
 
 #include "pid.h"
@@ -18,15 +24,20 @@ namespace autotune {
 constexpr int kMaxPoints = 4;
 constexpr int kMaxCycles = 12; // measured cycles kept per point
 constexpr int kLogSize = 24;   // phase-change log entries kept (oldest dropped)
+constexpr int kMaxFanLevels = 4;
 
-enum class Phase : uint8_t { Idle, Heating, Settling, Oscillating, Computing, Done, Failed, Aborted };
+// FanHold and FanShed run after the last point's Computing, only with Config::fanTest.
+enum class Phase : uint8_t { Idle, Heating, Settling, Oscillating, Computing, Done, Failed, Aborted, FanHold, FanShed };
 // docs/autotune/tuning-rules.md compares them on a simulated drum.
 enum class Rule : uint8_t { ZieglerNicholsPi, TyreusLuybenPi, TyreusLuybenPid, SimcPi, ZieglerNichols };
 enum class PointStatus : uint8_t { Pending, Ok, Unsettled, SmallSwing };
+// Skipped: not run (option off, or the points failed). Partial: some levels measured.
+enum class FanTestStatus : uint8_t { Skipped, Running, Ok, Partial, Failed };
 
 const char* phaseName(Phase p);
 const char* ruleName(Rule r);
 const char* pointStatusName(PointStatus s);
+const char* fanTestStatusName(FanTestStatus s);
 
 struct Config {
     float pointsC[kMaxPoints] = {121.1f, 148.9f, 176.7f, 0}; // 250, 300, 350 F; ascending, see makePlan()
@@ -52,6 +63,25 @@ struct Config {
     float expectedRateCps = 0.25f; // heat-up rate assumed before one is measured (time estimate)
     float expectedPeriodS = 180;   // cycle period assumed before one is measured
     Rule rule = Rule::ZieglerNicholsPi;
+
+    // Fan test (docs/autotune/fan-test.md). Levels ascending; 0 = unused.
+    bool fanTest = true;
+    float fanTestC = 0;       // held BT; 0 = the middle test point
+    float fanLevels[kMaxFanLevels] = {30, 60, 90, 0};
+    int fanLevelCount = 3;
+    uint8_t fanChannel = 0;   // 0 = exhaust fan; a second fan output would be 1
+    float fanBlockS = 60;     // steady check: consecutive block means
+    float fanSettleMinS = 90; // per level, after BT first reaches the band
+    float fanSettleMaxS = 900;
+    float fanApproachMaxS = 1200; // first level: time to reach the held temperature
+    float fanHoldBandC = 1.0f;    // block mean BT within this of the held temperature
+    float fanHoldDriftPct = 0.5f; // block mean heater within this of the previous block
+    float fanSaturateS = 120;     // heater at outputMax this long: the level cannot be held
+    float fanShedSkipS = 40;      // heater off: wait out the element's stored heat and the probe lag
+    float fanShedWindowS = 20;    // regression window per level
+    float fanShedMaxDropC = 30;   // end a heater-off window this far under the held temperature
+    float fanReheatHoldS = 45;    // back at the held temperature this long before the next window
+    float fanTimeoutS = 2400;     // whole fan test
 };
 
 // Builds the run's test points from the configured ones: drops non-positive and
@@ -59,6 +89,10 @@ struct Config {
 // abortAboveC - maxOvershootC, sorts ascending and drops points closer than 5 C.
 // Returns the number of points kept (0: nothing to test).
 int makePlan(const float* requestedC, int n, float minC, float maxSetpointC, Config& cfg);
+
+// Fan test levels: drops non-positive and non-finite entries, caps at 100 %,
+// sorts ascending and drops levels closer than 5 %. Updates fanLevelCount.
+void makeFanLevels(Config& cfg);
 
 struct Model { // first-order plus dead time, K e^(-Ls) / (tau s + 1); NaN when not identifiable
     float gainCPerPct, tauS, deadS;
@@ -76,6 +110,28 @@ struct PointResult {
     PidGains gains;                   // cfg.rule applied to this point
 };
 
+// One fan level. Temperatures C, heater and fan %, times s.
+struct FanLevelResult {
+    float fanPct = 0;
+    float holdPct = NAN;   // steady heater that holds BT at the test temperature
+    float dipC = NAN;      // BT drop after stepping to this level (NaN: first level, from the user's fan)
+    float recoveryS = NAN; // step to BT back within 0.5 C of the test temperature
+    float gainCPerPct = NAN; // open-loop BT change per % fan at a fixed heater (negative)
+    float tauS = NAN;        // drum time constant at this airflow: (BT - ambient) / shed rate
+    float shedCpm = NAN;     // heater off: BT fall rate at the test temperature, C/min
+};
+
+struct FanTestResult {
+    FanTestStatus status = FanTestStatus::Skipped;
+    const char* failure = ""; // string literal
+    uint8_t channel = 0;
+    float testC = 0, ambientC = 25;
+    float startFanPct = 0;    // fan before the test (the user's)
+    float durationS = 0;
+    int levelCount = 0;
+    FanLevelResult levels[kMaxFanLevels];
+};
+
 struct Progress {
     Phase phase = Phase::Idle;
     uint8_t point = 0, pointCount = 0; // 0-based index of the active point
@@ -83,6 +139,8 @@ struct Progress {
     uint8_t cycleOf = 0;               // settleCycles or maxCycles
     float targetC = 0;
     float output = 0;                  // heater request this sample
+    float fan = NAN;                   // fan request this sample; NaN = leave the fan alone
+    uint8_t fanLevel = 0, fanLevelCount = 0; // fan test: active level (0-based) and count
     float amplitudeC = 0, periodS = 0; // last full cycle at this point (0 before one)
     float elapsedS = 0, remainingS = 0;
 };
@@ -91,7 +149,8 @@ struct LogEntry {
     float tS;
     Phase phase;
     uint8_t point, cycle;
-    float a, b; // Heating: PV, target; Oscillating: amplitude, period; Computing: Ku, Tu
+    float a, b; // Heating: PV, target; Oscillating: amplitude, period; Computing: Ku, Tu;
+                // FanHold: fan, hold heater (0 at entry); FanShed: fan, shed C/min (0 at entry)
 };
 
 // Results and log for the network side (getAutotune); progress travels in the
@@ -107,13 +166,23 @@ struct Report {
     int used = 0; // points behind `recommended`
     int logCount = 0;
     LogEntry log[kLogSize] = {}; // oldest first
+    FanTestResult fan;
 };
 
 class Sequence {
 public:
     void start(const Config& c, float pv);
-    // Feed one sample every dtSeconds; returns the heater request (0 unless running).
+    // `fanPct` is the fan before the run (the fan test returns to it). Feed one
+    // sample every dtSeconds; update() returns the heater request (0 unless running).
+    void start(const Config& c, float pv, float fanPct);
     float update(float pv);
+    // Fan request for this sample while the fan test runs; NaN otherwise.
+    float fanRequest() const {
+        return running() ? p_.fan : NAN;
+    }
+    const FanTestResult& fanResult() const {
+        return fan_;
+    }
     // Ends a running test with the heater at 0. `reason` must be a string literal.
     void abort(const char* reason);
 
@@ -173,7 +242,23 @@ private:
     void relayStep(float pv);
     void finishPoint();
     void finishRun();
+    void startFanTest();
+    void fanHoldStep(float pv);
+    void fanShedStep(float pv);
+    bool endFanTestEarly(const char* why);
+    void finishFanTest(FanTestStatus st, const char* why);
+    void enterFanLevel(int i);
+    void enterShed();
+    void enterShedLevel(int i);
+    void shedMeasure();
+    void pushTrend(float pv);
+    float trendCps() const;
+    float leadS() const;
+    bool approach(float pv, float tf, float hold, float coastOut);
     float remaining(float pv) const;
+    float fanRemaining() const;
+    float fanTestTemp() const;
+    float holdEstimate() const;
     float relayOut() const {
         return high_ ? bias_ + d_ : bias_ - d_;
     }
@@ -199,6 +284,24 @@ private:
     LogEntry log_[kLogSize] = {};
     int logHead_ = 0, logCount_ = 0;
     uint32_t changes_ = 0;
+    // fan test
+    FanTestResult fan_;
+    Pid hold_{Pid::Config{}};
+    float fanStartT_ = 0, fanShedStartT_ = 0, holdPv_ = 0, levelT_ = 0, arriveT_ = -1, blockT_ = 0, satT_ = -1;
+    float blockPv_ = 0, blockU_ = 0, prevBlockU_ = NAN;
+    int blockN_ = 0;
+    float stepT_ = -1, dipMin_ = 0;
+    bool recovered_ = false;
+    int shedLevel_ = -1;
+    // BT trend over the last ~10 s and the approach stage: 0 coasting (heater
+    // off from above, full from below), 1 heater at the expected hold, 2 PI.
+    static constexpr int kTrendN = 64;
+    float trend_[kTrendN];
+    int trendN_ = 0, trendI_ = 0;
+    uint8_t approach_ = 2;
+    bool shedOff_ = false;
+    float shedT_ = 0, bandT_ = -1;
+    double sn_ = 0, st_ = 0, sp_ = 0, stt_ = 0, stp_ = 0;
 };
 
 } // namespace autotune

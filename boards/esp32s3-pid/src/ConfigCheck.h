@@ -113,4 +113,21 @@ static_assert(CPID_AUTOTUNE_TIME_LIMIT_MIN >= 20 && CPID_AUTOTUNE_TIME_LIMIT_MIN
               "CPID_AUTOTUNE_TIME_LIMIT_MIN: 20..180");
 static_assert(CPID_AUTOTUNE_RULE >= CPID_AUTOTUNE_RULE_ZN_PI && CPID_AUTOTUNE_RULE <= CPID_AUTOTUNE_RULE_SIMC_PI,
               "CPID_AUTOTUNE_RULE: one of CPID_AUTOTUNE_RULE_*");
+static_assert(CPID_AUTOTUNE_FAN_TEST == 0 || CPID_AUTOTUNE_FAN_TEST == 1, "CPID_AUTOTUNE_FAN_TEST: 0 or 1");
+constexpr bool fanLevelOk(int f) {
+    return f == 0 || (f >= 10 && f <= 100);
+}
+static_assert(fanLevelOk(CPID_AUTOTUNE_FAN_LEVEL1) && fanLevelOk(CPID_AUTOTUNE_FAN_LEVEL2) &&
+                  fanLevelOk(CPID_AUTOTUNE_FAN_LEVEL3),
+              "CPID_AUTOTUNE_FAN_LEVEL*: 0 or 10..100");
+static_assert(CPID_AUTOTUNE_FAN_TEST_C == 0 || autotunePointOk(CPID_AUTOTUNE_FAN_TEST_C),
+              "CPID_AUTOTUNE_FAN_TEST_C: 0 or a valid test point temperature");
+static_assert(CPID_AUTOTUNE_FAN_SHED_DROP_C >= 5 && CPID_AUTOTUNE_FAN_SHED_DROP_C <= 40,
+              "CPID_AUTOTUNE_FAN_SHED_DROP_C: 5..40");
+static_assert(CPID_AUTOTUNE_FAN_TIME_LIMIT_MIN >= 10 && CPID_AUTOTUNE_FAN_TIME_LIMIT_MIN <= 90,
+              "CPID_AUTOTUNE_FAN_TIME_LIMIT_MIN: 10..90");
+static_assert(CPID_FAN_FEEDFORWARD == 0 || CPID_FAN_FEEDFORWARD == 1, "CPID_FAN_FEEDFORWARD: 0 or 1");
+static_assert(CPID_RAMP_FEEDFORWARD == 0 || CPID_RAMP_FEEDFORWARD == 1, "CPID_RAMP_FEEDFORWARD: 0 or 1");
+static_assert(CPID_FAN_ASSIST == 0 || CPID_FAN_ASSIST == 1, "CPID_FAN_ASSIST: 0 or 1");
+static_assert(CPID_FAN_ASSIST_MAX >= 0 && CPID_FAN_ASSIST_MAX <= 50, "CPID_FAN_ASSIST_MAX: 0..50");
 } // namespace configcheck
