@@ -1418,6 +1418,7 @@ void test_library_recipe_profiles() {
 }
 
 void runAutotuneTests();
+void runWebSocketTests();
 
 int main() {
     UNITY_BEGIN();
@@ -1477,6 +1478,7 @@ int main() {
     RUN_TEST(test_recipe_guided_and_aborts);
     RUN_TEST(test_recipe_status_strings_owned);
     RUN_TEST(test_library_recipe_profiles);
-    runAutotuneTests(); // test_autotune.cpp
+    runAutotuneTests();  // test_autotune.cpp
+    runWebSocketTests(); // test_websocket.cpp
     return UNITY_END();
 }

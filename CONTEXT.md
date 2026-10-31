@@ -29,8 +29,8 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 | `esp32c3` | ESP32-C3 | 128×64 SSD1306 | `esp32c3` | ~85.7% |
 | `esp8266` | ESP8266 | 128×64 SSD1306 | `esp8266` | ~39.8% |
 | `esp32s3` (ES3C28P) | ESP32-S3 | 320×240 ILI9341 + LVGL 9 | `esp32s3` | ~29.0% |
-| `esp32s3-pid` | ESP32-S3 N16R8 | 0.96" 128×64 SSD1306 I2C (`boards/common` display; confirmed by Shawn) | `esp32s3-pid` | 29.8% (1 952 691 B), RAM 59 912 B (2026-10-29, with T55) |
-| `esp32s3-monitor` | ESP32-S3 N16R8 | same as `esp32s3-pid` | `esp32s3-monitor` | 26.6% (1 746 199 B), RAM 54 712 B (2026-10-29, with T55) |
+| `esp32s3-pid` | ESP32-S3 N16R8 | 0.96" 128×64 SSD1306 I2C (`boards/common` display; confirmed by Shawn) | `esp32s3-pid` | 30.3% (1 988 047 B), RAM 63 168 B (2026-10-31, T60) |
+| `esp32s3-monitor` | ESP32-S3 N16R8 | same as `esp32s3-pid` | `esp32s3-monitor` | 26.7% (1 751 995 B), RAM 54 712 B (2026-10-31, T60) |
 
 ## How a board is wired
 - `main.cpp` creates `CroasterCore core(dummyMode, pins)`, a display subclass
@@ -150,7 +150,8 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `CroasterCore::correctionBtCelsius()`/`correctionEtCelsius()` (D22),
   correction offsets rescaled on a `tempUnit` change (D22), two
   warning fixes (`CroasterBleManager` initializer order,
-  `CroasterDeviceIdentity` `PRIX32` format), and `MAX6675_Thermocouple` from
+  `CroasterDeviceIdentity` `PRIX32` format), the WebSocket client count read
+  from `server.connectedClients()` (T60, could be offered upstream), and `MAX6675_Thermocouple` from
   Shawn's fork at `v2.0.3` with `SmoothThermocoupleFix.cpp` removed (D21).
 - `MAX6675_Thermocouple` fork: <https://github.com/shawns1234/MAX6675_Thermocouple>,
   default branch `master`, no review branch (Shawn's call); release tags
@@ -220,6 +221,11 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 - Confirm `boardName()` strings against the ICRM app's `CroasterBoardTypes`.
 
 ## Gotchas
+- WebSockets 2.7.3 raises `DISCONNECTED` for every closed slot, including
+  connections that never upgraded; count clients with `connectedClients()`,
+  not ++/-- per event (T60). The ICRM app needs the periodic broadcast
+  (`[SOCKET-JSON]` in the serial log) and reconnects after ~10 s without it;
+  Artisan and the page poll and do not notice.
 - `MAX6675_Thermocouple` comes only from the fork pin in
   `croaster/library.json`. Adding `yuriisalimov/MAX6675_Thermocouple` to a
   board's `lib_deps` installs a second copy and the link fails with multiple

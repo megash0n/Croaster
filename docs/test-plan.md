@@ -84,6 +84,14 @@ Stock MAX6675 boards (`esp32s3`, `esp32c3`, `esp8266`) read probes through
 - Artisan and the page connected together → both keep 1 s data, no reconnects. **untested**
 - Release build: control loop timing unchanged with the page open (`docs/design.md` D27 "Loop timing"). **untested**
 
+## WebSocket and ICRM app (T60)
+- Connections closed before the upgrade, then the app connects → client count 1, broadcast runs (upstream count reached -13). **host** `test_ws_upstream_count_goes_negative`, `test_ws_count_after_unfinished_connections`
+- `CroasterWebSocketManager` reads the count from `server.connectedClients()` and still broadcasts `getJsonData()` every `interval` s. **host** `test_ws_manager_source_counts_from_library`
+- Broadcast keeps IiemB's fields and order (`id`, `name`, `data.interval`, `timer`, `BT`, `DBT`, `ET`, `DET`, `cBT`, `cET`, `temp`), BT/ET left out while NaN, control fields after `temp`. **host** `test_broadcast_upstream_fields_in_order`
+- Control fields never replace the app's fields; payload ASCII, no NaN or Infinity, parses, in every mode, trip and autotune state. **host** `test_broadcast_extension_keeps_app_fields`
+- Page open, hide the tab or drop WiFi a few times, then open ICRM → serial count never below 0, `# [SOCKET-JSON]` every 3 s, app stays connected over 10 min. **untested** (bench todo)
+- ICRM and the page connected together, close the page → count 1, ICRM keeps receiving. **untested** (bench todo)
+
 ## Profile library and recipes (D28, T55)
 - Format and limits: 50 profiles, 8 KB, name 40, notes 1 KB, ids, unknown keys kept, newer version refused, °F/°C conversion, interrupted save (a `.tmp` beside the `.json`) cleaned up at boot, busy rule. **host** `pio test -e native`
 - Recipe parser and runner: limits and reasons, `gte`/`lte`/`near`, false-to-true firing, ordered and any-order arming, unknown readings, time before CHARGE, setpoint ramps, power and setpoint steps mixed (Manual then PID), guided prompts and missed prompts, trip abort, cool and end. **host** `pio test -e native` (`test_recipe_*`, `test_library_recipe_profiles`)

@@ -123,6 +123,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `docs/artisan-settings.md`.
 
 ### Fixed
+- **ICRM app reconnected every ~10 s over WebSocket (T60).** Local change to
+  upstream code (`croaster/src/CroasterWebSocketManager.cpp`), suitable to
+  offer upstream. The WebSocket client count was incremented on `CONNECTED`
+  and decremented on `DISCONNECTED`, but the WebSockets library (2.7.3) also
+  reports `DISCONNECTED` for connections that close before the upgrade (a
+  page giving up on a slow handshake, a proxy check, a port probe). The count
+  went negative ("WebSocket Client Connected -13"), `broadcastData()` stopped,
+  and the ICRM app, which relies on the periodic broadcast, dropped and
+  reconnected. The count is now read from `server.connectedClients()` on both
+  events. The broadcast itself is unchanged. Polling clients (Artisan, the
+  page) and the heater, fan and comms watchdog were not affected. Host tests
+  pin the count and the broadcast fields the app reads.
 - **Page connection dropped after loading a recipe (T59).** After a recipe
   was loaded, every `getRecipe` reply carried stray bytes in `unit` (for
   example `"unit":"t??????"`). The unit letter was put in a local

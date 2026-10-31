@@ -39,7 +39,10 @@ void CroasterWebSocketManager::begin() {
     server.onEvent([this](uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
         switch (type) {
         case WStype_DISCONNECTED:
-            clientConnected--;
+            // Local change to upstream: count only clients that completed the handshake. The library also
+            // reports DISCONNECTED for connections that never upgraded, so a decrement could go negative
+            // and stop broadcastData() for the ICRM app.
+            clientConnected = server.connectedClients();
 
             debugln("# WebSocket Client Disconnected " + String(clientConnected));
 
@@ -53,7 +56,7 @@ void CroasterWebSocketManager::begin() {
 
             break;
         case WStype_CONNECTED:
-            clientConnected++;
+            clientConnected = server.connectedClients(); // local change to upstream, see WStype_DISCONNECTED
 
             debugln("# WebSocket Client Connected " + String(clientConnected));
 
