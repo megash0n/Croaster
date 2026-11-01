@@ -18,6 +18,7 @@
 #include "core/pid.h"
 #include "core/probe_correction.h"
 #include "core/autotune_sequence.h"
+#include "core/cooldown.h"
 #include "core/fan_assist.h"
 #include "core/roaster_model.h"
 #include "core/roast_profile.h"
@@ -46,9 +47,10 @@ public:
         , lim_(lim)
         , pid_(pidCfg()) {}
 
-    // tripFanPct: fan % when a safety trip starts (CooldownFan::trip).
-    void begin(const PidGains& gains, bool gainsTuned, PidInput input, float tripFanPct, int core,
-               UBaseType_t priority);
+    // tripFanPct: fan % when a safety trip starts (CooldownFan::trip);
+    // cooldownEndC: ET below which the cooldown ends (CooldownFan::endC).
+    void begin(const PidGains& gains, bool gainsTuned, PidInput input, float tripFanPct, float cooldownEndC,
+               int core, UBaseType_t priority);
     bool submit(const Command& c);
     Snapshot snapshot() const;
     // Copies a parsed profile in; takes effect on StartProfile. Network task only.
@@ -120,6 +122,8 @@ private:
     ProbeCorrection correction_;
     float manualHeater_ = 0;
     float tripFan_ = 100;
+    float cooldownEndC_ = 60;
+    Cooldown cooldown_;
     bool tripFanApplied_ = false; // trip fan set for the current trip
     MainsWatch mainsWatch_;
     uint32_t profileStartMs_ = 0, sensorBadSinceMs_ = 0;

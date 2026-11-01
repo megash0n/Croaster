@@ -69,7 +69,7 @@ ControlSettings defaults() {
     ControlSettings d;
     d.gains = {CPID_PID_KP, CPID_PID_KI, CPID_PID_KD};
     d.pidInput = static_cast<PidInput>(CPID_PID_INPUT);
-    d.cooldownFan = {CPID_COOLDOWN_FAN_STOP, CPID_COOLDOWN_FAN_TRIP};
+    d.cooldownFan = {CPID_COOLDOWN_FAN_STOP, CPID_COOLDOWN_FAN_TRIP, CPID_COOLDOWN_END_C};
     d.watchdog = {CPID_WATCHDOG_ENABLED != 0, CPID_WATCHDOG_TIMEOUT_S};
     d.fanAssist = CPID_FAN_ASSIST != 0;
     d.fanAssistMaxPct = CPID_FAN_ASSIST_MAX;
@@ -196,7 +196,7 @@ void setup() {
             controller.setRoasterModel(saved);
     }
     controller.begin(settings.gains, settings.gainsTuned, settings.pidInput, settings.cooldownFan.trip,
-                     CPID_CONTROL_CORE, configMAX_PRIORITIES - 3);
+                     settings.cooldownFan.endC, CPID_CONTROL_CORE, configMAX_PRIORITIES - 3);
     plugin.attach(app, settings);
     autotuner.attach(app);
     recipes.attach(app);

@@ -50,6 +50,8 @@ struct WatchdogSettings {
 struct CooldownFan {
     float stop = 65;  // after the stop command (yaeger's stored default)
     float trip = 100; // when a safety trip starts; over-temperature always uses 100
+    float endC = 60;  // cooldown ends (fan off) once ET is below this (140 F); cooldown.h
+    static constexpr float kMinEndC = 30, kMaxEndC = 150;
 };
 
 // Croaster reports temperatures in a user-selected unit ("C", "F" or "K"); the
@@ -89,7 +91,7 @@ struct Command {
         SetGains,    // a,b,c = kp,ki,kd
         StartAutotune, // a = fan test 1/0, NaN = the configured default (CPID_AUTOTUNE_FAN_TEST)
         StartProfile, // profile must already be loaded via Controller::loadProfile
-        Stop,         // heater 0, back to Manual (fan unchanged)
+        Stop,         // heater 0, back to Manual; b = 1: fan to a % and start the cooldown (cooldown.h), else fan unchanged
         EmergencyOff, // heater 0, fan 100, Manual
         SetTripFan,   // a = fan % applied when a safety trip starts
         Trip,         // a = (float)SafetyTrip; raised by the network side (comms, OTA)
@@ -98,6 +100,7 @@ struct Command {
         ApplyAutotune,   // pending autotune gains -> in use; autotuneSeq++ saves them
         DiscardAutotune, // drop pending autotune results
         SetFanAssist,    // a = 1/0; acts only with a saved fan test (fan_assist.h)
+        SetCooldownEnd,  // a = C: ET below which the cooldown ends (CooldownFan::endC)
     };
     Kind kind;
     float a = 0, b = 0, c = 0;
@@ -137,6 +140,7 @@ struct Snapshot {
     uint32_t autotuneStatusSeq = 0;  // increments on every autotune status update
     autotune::Progress autotuneProgress; // phase, point, cycle; valid while autotune runs
     bool autotunePending = false;        // results waiting for apply or discard
+    bool cooling = false;                // cooldown running: fan on until ET is below CooldownFan::endC
     uint32_t uptimeMs = 0;
 };
 

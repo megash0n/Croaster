@@ -169,6 +169,7 @@
 // changes them at runtime and saves them in NVS.
 #define CPID_COOLDOWN_FAN_STOP 65  // fan % after "stop" (yaeger's default)
 #define CPID_COOLDOWN_FAN_TRIP 100 // fan % when any safety trip starts (over-temp: always 100)
+#define CPID_COOLDOWN_END_C 60     // 140 F; cooldown ends (fan off) once ET is below this; "end" in the same command
 // Comms watchdog: heater off + trip fan when no client message arrives for
 // the timeout while heating (profile runs exempt). These are first-boot defaults;
 // {"command":{"watchdog":{"enabled":false}}} or {...{"timeout":20}} changes them

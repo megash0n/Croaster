@@ -39,6 +39,7 @@
     pidKd: 'PID Kd', wifiStrength: 'WiFi RSSI (dBm)', dummy: 'Fake readings', loopStackFree: 'Loop stack free (bytes)',
     mode: 'Mode', pidInput: 'PID input', setpoint: 'Setpoint', burner: 'Heater (%)', fan: 'Fan (%)',
     'cooldownFan.stop': 'Cooldown fan after stop (%)', 'cooldownFan.trip': 'Cooldown fan after trip (%)',
+    'cooldownFan.end': 'Cooldown ends below ET', cooling: 'Cooling',
     'watchdog.enabled': 'Comms watchdog', 'watchdog.timeout': 'Watchdog timeout (s)', 'pid.kp': 'PID Kp',
     'pid.ki': 'PID Ki', 'pid.kd': 'PID Kd', tuned: 'Gains tuned', mainsOk: 'Mains detected',
     profileElapsed: 'Profile elapsed (s)', ambient: 'Cold junction',
@@ -344,7 +345,7 @@
     const c = S.control && S.control.cooldownFan;
     const fan = c && isNum(c.stop) ? ' (' + c.stop + ' %)' : '';
     confirmThen('Stop the roast? The heater turns off, the board switches to Manual (ending PID, profile or autotune), ' +
-      'the fan runs at the cooldown speed' + fan + ', and recording ends.', () => {
+      'the fan runs at the cooldown speed' + fan + ' until ET falls below the cooldown end, and recording ends.', () => {
       if (S.link !== 'open') {
         logReply('err', 'STOP not sent: not connected. The board keeps its current heater and mode.');
         return;
@@ -409,7 +410,7 @@
     $('#t-fan-assist').hidden = !assist;
     $('#t-fan-assist').textContent = assist;
     $('#t-sv').textContent = fmt(d.SV);
-    $('#t-mode').textContent = d.Mode || '—';
+    $('#t-mode').textContent = (d.Mode || '—') + (d.cooling ? ' · cooling' : '');
     const stop = $('#stop');
     stop.disabled = !recording();
     stop.title = recording() ? 'End the roast: heater off, Manual, cooldown fan' : 'Available while a roast is recording';
@@ -786,7 +787,7 @@
       case 'setpoint': return { setpoint: n('value') };
       case 'pidInput': return { pidInput: f.value.value };
       case 'pid': return { pid: { kp: n('kp'), ki: n('ki'), kd: n('kd') } };
-      case 'cooldownFan': return { cooldownFan: { stop: n('stop'), trip: n('trip') } };
+      case 'cooldownFan': return { cooldownFan: { stop: n('stop'), trip: n('trip'), end: n('end') } };
       case 'watchdog': return { watchdog: { enabled: f.enabled.checked, timeout: Math.round(n('timeout')) } };
       case 'fanAssist': return { fanAssist: f.enabled.checked };
       case 'tempUnit': return { tempUnit: f.value.value };

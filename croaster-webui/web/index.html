@@ -180,13 +180,14 @@
         <div class="card">
           <h2>Safety</h2>
           <div class="row-buttons">
-            <button type="button" class="stop-inline" data-cmd='{"command":"stop"}' data-confirm="Turn the heater off? The board switches to Manual and sets the fan to the cooldown speed. A recording in this page keeps running until STOP.">Heater off</button>
+            <button type="button" class="stop-inline" data-cmd='{"command":"stop"}' data-confirm="Turn the heater off? The board switches to Manual and runs the fan at the cooldown speed until ET falls below the cooldown end. A recording in this page keeps running until STOP.">Heater off</button>
             <button type="button" data-cmd='{"command":"clearTrip"}'>Clear trip</button>
           </div>
           <form class="field wide" data-send="cooldownFan">
             <span>Cooldown fan %</span>
             <label>after stop <input type="number" name="stop" min="0" max="100" step="1" required></label>
             <label>after trip <input type="number" name="trip" min="0" max="100" step="1" required></label>
+            <label title="Cooldown ends (fan off) once ET falls below this. Over-temperature keeps the fan at 100 % until then. Without an ET reading the fan keeps running.">off below ET <input type="number" name="end" step="any" required> <span data-unit></span></label>
             <button type="submit">Save</button>
           </form>
           <form class="field wide" data-send="watchdog">

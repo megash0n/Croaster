@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Cooldown end.** After a stop or a safety trip the fan runs at the
+  cooldown speed until ET falls below a set temperature (default 140 °F /
+  60 °C, `CPID_COOLDOWN_END_C`), then turns off and the roaster is idle.
+  Over-temperature keeps the fan at 100 % until then; with no ET reading the
+  fan keeps running. Any heater, fan or mode command cancels it. Set it in
+  Controls > Safety or with `{"command":{"cooldownFan":{"end":T}}}` (display
+  unit, saved in NVS). `getControl` and the data report `cooling`.
 - **Fake readings button shows its state (D33, T65).** Croaster PID data
   gains `dummy` (Croaster's `useDummyData`, through a one-line
   read-only getter added to `CroasterCore`); the page's Maintenance > Fake

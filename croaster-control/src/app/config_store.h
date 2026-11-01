@@ -9,7 +9,7 @@ struct ControlSettings {
     PidGains gains;                   // defaults from config.h (CPID_PID_KP/KI/KD)
     bool gainsTuned = false;          // gains saved by autotune or the pid command (NVS "tuned")
     PidInput pidInput = PidInput::BT; // default from config.h (CPID_PID_INPUT)
-    CooldownFan cooldownFan;          // defaults from config.h (CPID_COOLDOWN_FAN_STOP/TRIP)
+    CooldownFan cooldownFan;          // defaults from config.h (CPID_COOLDOWN_FAN_STOP/TRIP, CPID_COOLDOWN_END_C)
     WatchdogSettings watchdog;        // defaults from config.h (CPID_WATCHDOG_*)
     bool fanAssist = true;            // default from config.h (CPID_FAN_ASSIST)
     float fanAssistMaxPct = 20;       // CPID_FAN_ASSIST_MAX (not stored)

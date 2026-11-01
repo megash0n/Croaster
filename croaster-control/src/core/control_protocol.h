@@ -13,9 +13,10 @@
 //   {"command":{"pidInput":"ET"|"BT"|"MAX"}}
 //   {"command":{"pid":{"kp":..,"ki":..,"kd":..}}}       saved to NVS
 //   {"command":{"cooldownFan":0..100}}                  fan after stop, saved to NVS
-//   {"command":{"cooldownFan":{"stop":0..100,"trip":0..100}}} either field alone
-//                                            works; trip = fan when a safety trip
-//                                            starts; saved to NVS
+//   {"command":{"cooldownFan":{"stop":0..100,"trip":0..100,"end":T}}} any field
+//                                            alone works; trip = fan when a safety trip
+//                                            starts; end = ET below which the cooldown
+//                                            ends (fan off; 30..150 C); saved to NVS
 //   {"command":{"watchdog":{"enabled":bool,"timeout":s}}} saved to NVS; either
 //                                            field alone works; timeout 2..600 s
 //   {"command":{"fanAssist":true|false}}    fan assist option (fan_assist.h), saved to NVS
@@ -66,6 +67,7 @@ struct Parsed {
     PidInput pidInput = PidInput::ET;
     bool hasCooldownStop = false; // persist these
     bool hasCooldownTrip = false;
+    bool hasCooldownEnd = false;
     CooldownFan cooldownFan;
     bool hasWatchdogEnabled = false; // persist these
     bool watchdogEnabled = true;

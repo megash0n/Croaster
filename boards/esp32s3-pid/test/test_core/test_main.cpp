@@ -11,6 +11,7 @@
 
 #include "core/autotune_status.h"
 #include "core/control_protocol.h"
+#include "core/cooldown.h"
 #include "core/mains_watch.h"
 #include "core/max31855.h"
 #include "core/max6675.h"
@@ -344,6 +345,44 @@ void test_protocol_cooldown_fan() {
     controlproto::writeControlInfo(s, CooldownFan{60, 95}, WatchdogSettings{}, 'C', d.to<JsonObject>());
     TEST_ASSERT_EQUAL(60, d["cooldownFan"]["stop"].as<int>());
     TEST_ASSERT_EQUAL(95, d["cooldownFan"]["trip"].as<int>());
+}
+
+void test_protocol_cooldown_end() {
+    auto p = parse(R"({"command":{"cooldownFan":{"end":140}}})", 'F');
+    TEST_ASSERT_TRUE(p.hasCooldownEnd);
+    TEST_ASSERT_FALSE(p.hasCooldownStop || p.hasCooldownTrip);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 60.0f, p.cooldownFan.endC);
+    p = parse(R"({"command":{"cooldownFan":{"end":20}}})"); // below 30 C: ignored
+    TEST_ASSERT_FALSE(p.hasCooldownEnd);
+    p = parse(R"({"command":{"cooldownFan":{"end":400}}})", 'F'); // 204 C: ignored
+    TEST_ASSERT_FALSE(p.hasCooldownEnd);
+    TEST_ASSERT_EQUAL_FLOAT(60.0f, CooldownFan{}.endC);
+
+    Snapshot s;
+    s.cooling = true;
+    JsonDocument d;
+    controlproto::writeControlInfo(s, CooldownFan{60, 95, 60}, WatchdogSettings{}, 'F', d.to<JsonObject>());
+    TEST_ASSERT_EQUAL_FLOAT(140.0f, d["cooldownFan"]["end"].as<float>());
+    TEST_ASSERT_TRUE(d["cooling"].as<bool>());
+    JsonDocument data;
+    controlproto::writeDataFields(s, 'F', data.to<JsonObject>());
+    TEST_ASSERT_TRUE(data["cooling"].as<bool>());
+}
+
+void test_cooldown_ends_below_et() {
+    Cooldown c;
+    TEST_ASSERT_FALSE(c.update(20, 60, false)); // not started
+    c.start();
+    TEST_ASSERT_FALSE(c.update(180, 60, false));
+    TEST_ASSERT_FALSE(c.update(NAN, 60, false)); // no ET: keeps running
+    TEST_ASSERT_TRUE(c.active());
+    TEST_ASSERT_FALSE(c.update(59, 60, true)); // over-temperature: fan stays at 100
+    TEST_ASSERT_TRUE(c.update(59.9f, 60, false));
+    TEST_ASSERT_FALSE(c.active());
+    TEST_ASSERT_FALSE(c.update(20, 60, false)); // ends once
+    c.start();
+    c.cancel(); // operator command
+    TEST_ASSERT_FALSE(c.update(20, 60, false));
 }
 
 void test_protocol_watchdog() {
@@ -1442,6 +1481,8 @@ int main() {
     RUN_TEST(test_protocol_values);
     RUN_TEST(test_protocol_watchdog);
     RUN_TEST(test_protocol_cooldown_fan);
+    RUN_TEST(test_protocol_cooldown_end);
+    RUN_TEST(test_cooldown_ends_below_et);
     RUN_TEST(test_protocol_only_key);
     RUN_TEST(test_protocol_profile);
     RUN_TEST(test_protocol_profile_from_page);

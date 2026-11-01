@@ -102,6 +102,12 @@ Parsed parseNested(JsonObjectConst c, char unit, const char* only) {
         if (v.is<JsonObjectConst>()) {
             p.hasCooldownStop = fanPercent(v["stop"], p.cooldownFan.stop);
             p.hasCooldownTrip = fanPercent(v["trip"], p.cooldownFan.trip);
+            if (v["end"].is<float>()) {
+                const float endC = toCelsius(v["end"].as<float>(), unit);
+                p.hasCooldownEnd = endC >= CooldownFan::kMinEndC && endC <= CooldownFan::kMaxEndC;
+                if (p.hasCooldownEnd)
+                    p.cooldownFan.endC = endC;
+            }
         } else {
             p.hasCooldownStop = fanPercent(v, p.cooldownFan.stop);
         }
@@ -173,6 +179,7 @@ void writeDataFields(const Snapshot& s, char unit, JsonObject d) {
     putNum(d["SV"], fromCelsius(s.setpoint, unit));
     d["Mode"] = modeName(s.mode);
     d["trip"] = tripName(s.trip);
+    d["cooling"] = s.cooling;
     putNum(d["Amb"], fromCelsius(s.ambient, unit));
     d["Target"] = pidInputName(s.pidInput);
     char at[48];
@@ -203,6 +210,8 @@ void writeControlInfo(const Snapshot& s, const CooldownFan& cooldownFan, const W
     JsonObject cf = o["cooldownFan"].to<JsonObject>();
     cf["stop"] = cooldownFan.stop;
     cf["trip"] = cooldownFan.trip;
+    putNum(cf["end"], fromCelsius(cooldownFan.endC, unit));
+    o["cooling"] = s.cooling;
     JsonObject w = o["watchdog"].to<JsonObject>();
     w["enabled"] = wd.enabled;
     w["timeout"] = wd.timeoutS;

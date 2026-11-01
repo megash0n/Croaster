@@ -105,7 +105,13 @@ void ControlPlugin::apply(const controlproto::Parsed& p) {
         settings_.pidInput = p.pidInput;
         ConfigStore::savePidInput(p.pidInput);
     }
-    if (p.hasCooldownStop || p.hasCooldownTrip) {
+    if (p.hasCooldownEnd) {
+        settings_.cooldownFan.endC = p.cooldownFan.endC;
+        Command c{Command::Kind::SetCooldownEnd};
+        c.a = settings_.cooldownFan.endC;
+        controller_.submit(c);
+    }
+    if (p.hasCooldownStop || p.hasCooldownTrip || p.hasCooldownEnd) {
         if (p.hasCooldownStop)
             settings_.cooldownFan.stop = p.cooldownFan.stop;
         if (p.hasCooldownTrip) {
@@ -159,10 +165,10 @@ String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
 }
 
 void ControlPlugin::stop() {
-    controller_.submit(Command{Command::Kind::Stop});
-    Command fan{Command::Kind::SetFan};
-    fan.a = settings_.cooldownFan.stop;
-    controller_.submit(fan);
+    Command c{Command::Kind::Stop}; // heater off, Manual, cooldown fan until ET is below the end temperature
+    c.a = settings_.cooldownFan.stop;
+    c.b = 1;
+    controller_.submit(c);
 }
 
 void ControlPlugin::begin() {

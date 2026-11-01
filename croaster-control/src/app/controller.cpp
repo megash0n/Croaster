@@ -5,9 +5,10 @@
 
 #include <cmath>
 
-void Controller::begin(const PidGains& gains, bool gainsTuned, PidInput input, float tripFanPct, int core,
-                       UBaseType_t prio) {
+void Controller::begin(const PidGains& gains, bool gainsTuned, PidInput input, float tripFanPct, float cooldownEndC,
+                       int core, UBaseType_t prio) {
     tripFan_ = tripFanPct;
+    cooldownEndC_ = cooldownEndC;
     fanBase_ = fan_.get();
     pid_.setGains(gains);
     st_.gains = gains;
@@ -155,6 +156,11 @@ void Controller::apply(const Command& c) {
     if (c.kind == Command::Kind::SetHeater || c.kind == Command::Kind::SetMode ||
         c.kind == Command::Kind::StartProfile || c.kind == Command::Kind::StartAutotune)
         st_.trip = SafetyTrip::None;
+    // The operator took over: Manual does what is set, so the cooldown no longer ends on its own.
+    if ((c.kind == Command::Kind::SetHeater && c.a > 0) || c.kind == Command::Kind::SetFan ||
+        c.kind == Command::Kind::SetMode || c.kind == Command::Kind::StartProfile ||
+        c.kind == Command::Kind::StartAutotune)
+        cooldown_.cancel();
     if (const char* why = outputCommandStopsAutotune(st_.mode, c.kind, c.a, fanBase_)) {
         setMode(Mode::Manual, pv, why); // heater 0
         if (c.kind == Command::Kind::SetHeater)
@@ -276,6 +282,11 @@ void Controller::apply(const Command& c) {
         manualHeater_ = 0;
         setMode(Mode::Manual, pv, "stop");
         manualHeater_ = 0;
+        if (c.b == 1) {
+            assist_.reset();
+            setBaseFan(c.a);
+            cooldown_.start();
+        }
         break;
     case Command::Kind::EmergencyOff:
         manualHeater_ = 0;
@@ -283,6 +294,7 @@ void Controller::apply(const Command& c) {
         manualHeater_ = 0;
         assist_.reset();
         setBaseFan(100);
+        cooldown_.start();
         break;
     case Command::Kind::SetTripFan:
         tripFan_ = c.a;
@@ -297,6 +309,9 @@ void Controller::apply(const Command& c) {
     }
     case Command::Kind::SetFanAssist:
         use_.fanAssist = c.a != 0;
+        break;
+    case Command::Kind::SetCooldownEnd:
+        cooldownEndC_ = c.a;
         break;
     case Command::Kind::Trip:
         st_.trip = static_cast<SafetyTrip>(static_cast<int>(c.a));
@@ -379,7 +394,8 @@ void Controller::controlStep(uint32_t now) {
     }
 
     // ---- safety interlocks (order matters: last one wins) ----
-    if (overTemperature(last_, correction_, lim_.overTempC)) {
+    const bool overTemp = overTemperature(last_, correction_, lim_.overTempC);
+    if (overTemp) {
         st_.trip = SafetyTrip::OverTemp;
         assist_.reset();
         fanBase_ = 100;
@@ -411,6 +427,7 @@ void Controller::controlStep(uint32_t now) {
             assist_.reset();
             fanBase_ = st_.trip == SafetyTrip::OverTemp ? 100 : tripFan_;
             fan_.set(fanBase_);
+            cooldown_.start();
         }
         tripFanApplied_ = true;
         out = 0;
@@ -423,6 +440,14 @@ void Controller::controlStep(uint32_t now) {
         if (!std::isfinite(testFan))
             fanBase_ = fmaxf(fanBase_, lim_.minFanWithHeat);
     }
+    // ---- cooldown end: ET below the end temperature -> fan off, idle ----
+    if (st_.mode != Mode::Manual)
+        cooldown_.cancel();
+    if (cooldown_.update(corrected(last_, correction_).et, cooldownEndC_, overTemp)) {
+        assist_.reset();
+        setBaseFan(0);
+        out = 0;
+    }
     heater_.set(out);
 
     // ---- publish ----
@@ -433,6 +458,7 @@ void Controller::controlStep(uint32_t now) {
     st_.fanAssistPct = assist_.extra();
     st_.fanAssistOn = use_.fanAssist;
     st_.fanTested = model_.fan[0].valid;
+    st_.cooling = cooldown_.active();
     st_.uptimeMs = now;
     st_.autotuneProgress = autotune_.progress();
     // The report (about 1 KB) is copied only when the sequence logged something.
