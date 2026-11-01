@@ -158,3 +158,20 @@ test('rateIcon draws the rate of climb: Front falls, Back rises, Normal is a hum
   assert.deepStrictEqual(ys('custom'), linear); // no curve: linear
   assert.strictEqual(RS.rateIcon(RS.rates('custom', back.map((_, i) => i * 5)), 0, 0, 20, 100), RS.rateIcon(RS.rates('back'), 0, 0, 20, 100));
 });
+
+test('custom curves: 5 editor points, smooth 21 rates through them, no overshoot', () => {
+  assert.deepStrictEqual(RS.knotsOf(RS.PRESETS.back), [0, 25, 50, 75, 100]);
+  const lin = RS.fromKnots([0, 25, 50, 75, 100]);
+  assert.deepStrictEqual(lin, RS.PRESETS.back); // straight points give a straight line
+  const hump = RS.fromKnots([0, 0, 100, 0, 0]);
+  assert.strictEqual(hump.length, RS.POINTS);
+  assert.ok(hump.every((v) => v >= 0 && v <= 100 && Number.isInteger(v)));
+  assert.deepStrictEqual(RS.knotsOf(hump), [0, 0, 100, 0, 0]); // passes through the points
+  assert.ok(hump.slice(0, 6).every((v) => v === 0)); // flat stays flat: no dip below 0
+  assert.ok(hump[7] > 0 && hump[7] < hump[9]);
+  assert.ok(RS.validCurve(RS.fromKnots([100, 40, 60, 10, 0])));
+  // A 21-rate curve from an older recipe still loads unchanged.
+  const old = Array.from({ length: 21 }, (_, i) => (i % 2 ? 30 : 70));
+  assert.ok(RS.validCurve(old));
+  assert.deepStrictEqual(RS.rates('custom', old), old);
+});

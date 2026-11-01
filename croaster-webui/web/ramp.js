@@ -13,6 +13,7 @@
 
   const POINTS = 21; // rate at 0, 5, ... 100 % of the ramp time
   const STEP = 5;    // rates snap to steps of 5 (0..100)
+  const KNOTS = 5;   // custom editor points at 0, 25, 50, 75, 100 % of the ramp time
   const SHAPES = ['linear', 'normal', 'front', 'back', 'custom'];
   const LABELS = { linear: 'Linear', normal: 'Normal', front: 'Front', back: 'Back', custom: 'Custom' };
   const HINTS = {
@@ -43,6 +44,29 @@
   // A valid custom curve: 21 numbers 0..100, at least one above 0.
   function validCurve(c) {
     return Array.isArray(c) && c.length === POINTS && c.every((v) => isNum(v) && v >= 0 && v <= 100) && c.some((v) => v > 0);
+  }
+
+  // The editor's 5 points of a 21-rate curve (its rates at 0, 25 ... 100 %).
+  function knotsOf(c) {
+    const step = (POINTS - 1) / (KNOTS - 1);
+    return Array.from({ length: KNOTS }, (_, k) => c[k * step]);
+  }
+
+  // The 21 rates through 5 points, by monotone cubic interpolation
+  // (Fritsch-Carlson): smooth, and never above or below the points either side,
+  // so no rate goes under 0 or over 100. Rounded to whole percent.
+  function fromKnots(k) {
+    const n = k.length - 1, d = [], m = [];
+    for (let i = 0; i < n; i++) d.push(k[i + 1] - k[i]);
+    m[0] = d[0];
+    m[n] = d[n - 1];
+    for (let i = 1; i < n; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : 2 / (1 / d[i - 1] + 1 / d[i]);
+    return Array.from({ length: POINTS }, (_, j) => {
+      const x = j / (POINTS - 1) * n, i = Math.min(n - 1, Math.floor(x)), t = x - i;
+      const t2 = t * t, t3 = t2 * t;
+      const v = (2 * t3 - 3 * t2 + 1) * k[i] + (t3 - 2 * t2 + t) * m[i] + (-2 * t3 + 3 * t2) * k[i + 1] + (t3 - t2) * m[i + 1];
+      return Math.max(0, Math.min(100, Math.round(v)));
+    });
   }
 
   // The rate curve of `shape` (a custom one from `curve`); linear when unknown.
@@ -197,6 +221,6 @@
       (isNum(w.fan) ? ' at fan ' + Math.round(w.fan) + ' %' : '') + '. BT will fall behind: lengthen the ramp or use a flatter shape.';
   }
 
-  return { POINTS, STEP, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, rates, fraction, peak, rateIcon, path,
+  return { POINTS, STEP, KNOTS, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, knotsOf, fromKnots, rates, fraction, peak, rateIcon, path,
     model, maxRorC, rampStartEstimate, checkRecipe, checkText };
 });

@@ -326,6 +326,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- **Custom ramp curve editor uses 5 points.** The points sit at 0, 25, 50,
+  75 and 100 % of the ramp time and are dragged up or down. The board still
+  receives 21 rates, filled in by monotone cubic interpolation, which never
+  dips below 0 or overshoots the points. Recipes saved with 21 free rates load
+  and run unchanged; their curve is only smoothed once a point is moved.
 - **Ramp shape icons show the rate of climb.** The icon next to a ramp's
   shape now draws the rate curve itself (Front falls, Back rises, Normal is a
   hump, Linear is flat, Custom shows its own points) instead of the

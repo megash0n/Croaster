@@ -1207,11 +1207,16 @@
     return box;
   }
 
-  // Touch editor for a custom ramp: 21 rates (0..100 in steps of 5) at 0, 5,
-  // ... 100 % of the ramp time, drawn by dragging; the path it gives below.
+  // Touch editor for a custom ramp: 5 points (0..100 in steps of 5) at 0, 25,
+  // ... 100 % of the ramp time, dragged up and down; the board gets the 21
+  // rates of the smooth curve through them. A curve saved with 21 free rates
+  // stays as it is until a point is moved.
   function openCurveEditor(a, power, done) {
     const dlg = $('#curve-dialog');
     let rates = RS.rates('custom', a.curve);
+    let knots = RS.knotsOf(rates).map(RS.snap);
+    let touched = false;
+    const setKnots = (k) => { knots = k; rates = RS.fromKnots(k); touched = true; };
     const svg = $('#curve-edit');
     const prev = $('#curve-path');
     const W = 400, H = 180, M = { l: 30, r: 10, t: 10, b: 20 };
@@ -1233,7 +1238,8 @@
         svg.append(tx);
       }
       svg.append(svgEl('path', { class: 'curve-line', d: rates.map((v, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(v).toFixed(1)).join('') }));
-      rates.forEach((v, i) => svg.append(svgEl('circle', { class: 'curve-dot', cx: px(i), cy: py(v), r: 5 })));
+      const kx = (RS.POINTS - 1) / (RS.KNOTS - 1);
+      knots.forEach((v, k) => svg.append(svgEl('circle', { class: 'curve-dot', cx: px(k * kx), cy: py(touched ? v : rates[k * kx]), r: 7 })));
       // Path preview, start to target: the start is the heater or setpoint when the step fires.
       prev.textContent = '';
       const pts = RS.path(0, 1, 1, rates, 40);
@@ -1252,13 +1258,11 @@
     const setAt = (ev) => {
       const r = svg.getBoundingClientRect();
       const x = (ev.clientX - r.left) / r.width * W, y = (ev.clientY - r.top) / r.height * H;
-      const i = Math.max(0, Math.min(RS.POINTS - 1, Math.round((x - M.l) / (W - M.l - M.r) * (RS.POINTS - 1))));
-      const v = RS.snap((H - M.b - y) / (H - M.t - M.b) * 100);
-      // A fast drag skips points: fill the ones between in a straight line.
-      const j = last === null ? i : last, lo = Math.min(i, j), hi = Math.max(i, j);
-      const vj = last === null ? v : rates[j];
-      for (let n = lo; n <= hi; n++) rates[n] = hi === lo ? v : RS.snap(vj + (v - vj) * (n - j) / (i - j));
-      last = i;
+      // The point under the pointer when the drag starts stays picked.
+      if (last === null) last = Math.max(0, Math.min(RS.KNOTS - 1, Math.round((x - M.l) / (W - M.l - M.r) * (RS.KNOTS - 1))));
+      const k = knots.slice();
+      k[last] = RS.snap((H - M.b - y) / (H - M.t - M.b) * 100);
+      setKnots(k);
       draw();
     };
     let drag = false, last = null;
@@ -1269,7 +1273,7 @@
     presets.textContent = '';
     for (const sh of ['linear', 'normal', 'front', 'back']) {
       const b = el('button', { type: 'button', class: 'ghost', title: RS.HINTS[sh] }, RS.LABELS[sh]);
-      b.addEventListener('click', () => { rates = RS.rates(sh); draw(); });
+      b.addEventListener('click', () => { setKnots(RS.knotsOf(RS.rates(sh))); draw(); });
       presets.append(b);
     }
     $('#curve-title').textContent = (power ? 'Heater' : 'Setpoint') + ' ramp shape';
