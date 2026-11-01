@@ -75,6 +75,14 @@
     return { factor: total > 0 ? r[at] / (total / n) : 1, at: at / n };
   }
 
+  // SVG path of the rate curve `r` itself (not the ramp path) in a box at
+  // (x, y) of size w x h: rate 0 at the bottom, 100 at the top. Used for the
+  // shape icons: Front falls, Back rises, Normal is a hump, Linear is flat.
+  function rateIcon(r, x, y, w, h) {
+    const n = r.length - 1;
+    return r.map((v, i) => (i ? 'L' : 'M') + (x + i / n * w).toFixed(1) + ' ' + (y + h - v / 100 * h).toFixed(1)).join('');
+  }
+
   // `count` + 1 points {t, v} of a ramp from `from` to `to` over `seconds`.
   function path(from, to, seconds, r, count) {
     const n = count || 40, out = [];
@@ -189,6 +197,6 @@
       (isNum(w.fan) ? ' at fan ' + Math.round(w.fan) + ' %' : '') + '. BT will fall behind: lengthen the ramp or use a flatter shape.';
   }
 
-  return { POINTS, STEP, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, rates, fraction, peak, path,
+  return { POINTS, STEP, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, rates, fraction, peak, rateIcon, path,
     model, maxRorC, rampStartEstimate, checkRecipe, checkText };
 });

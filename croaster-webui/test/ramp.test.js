@@ -146,3 +146,15 @@ test('checkRecipe starts a ramp at its BT trigger and skips one that starts at o
   // BT trigger above the target: the board holds the target, no ramp to check.
   assert.deepStrictEqual(RS.checkRecipe({ steps: [{ trigger: { type: 'bt', value: 215 }, actions: [steep] }] }, 'C', saved, 'C'), []);
 });
+
+test('rateIcon draws the rate of climb: Front falls, Back rises, Normal is a hump, Linear is flat', () => {
+  const ys = (sh) => RS.rateIcon(RS.rates(sh), 0, 0, 20, 100).split(/[ML]/).filter(Boolean).map((p) => Number(p.split(' ')[1]));
+  const front = ys('front'), back = ys('back'), normal = ys('normal'), linear = ys('linear');
+  assert.ok(front[0] < front[front.length - 1]); // y grows downward: high rate first
+  assert.ok(back[0] > back[back.length - 1]);
+  const mid = normal[(normal.length - 1) / 2];
+  assert.ok(mid < normal[0] && mid < normal[normal.length - 1]);
+  assert.ok(linear.every((y) => y === linear[0]));
+  assert.deepStrictEqual(ys('custom'), linear); // no curve: linear
+  assert.strictEqual(RS.rateIcon(RS.rates('custom', back.map((_, i) => i * 5)), 0, 0, 20, 100), RS.rateIcon(RS.rates('back'), 0, 0, 20, 100));
+});

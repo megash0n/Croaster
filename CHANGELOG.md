@@ -326,6 +326,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- **Ramp shape icons show the rate of climb.** The icon next to a ramp's
+  shape now draws the rate curve itself (Front falls, Back rises, Normal is a
+  hump, Linear is flat, Custom shows its own points) instead of the
+  temperature path, which looked inverted for Front and like an S for Normal.
 - **STOP works as an emergency off whenever the board is active.** The page
   enables STOP while a roast records, the heater is on, the mode is not
   Manual or a recipe is running. After the confirm it sends `stop`: heater

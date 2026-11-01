@@ -1177,7 +1177,7 @@
     checkRamps();
   }
 
-  // Shape picker for a ramp: the shape list, a small preview of the path, and
+  // Shape picker for a ramp: the shape list, an icon of its rate of climb, and
   // the curve editor for a custom shape.
   function rampShapeControl(a, power, changed) {
     const box = el('span', { class: 'ramp-shape' });
@@ -1187,8 +1187,7 @@
     const spark = svgEl('svg', { class: 'ramp-spark', viewBox: '0 0 48 20', 'aria-hidden': 'true' });
     const draw = () => {
       spark.textContent = '';
-      const pts = RS.path(0, 1, 1, RS.rates(a.shape, a.curve), 24);
-      spark.append(svgEl('path', { d: pts.map((p, n) => (n ? 'L' : 'M') + (2 + p.t * 44).toFixed(1) + ' ' + (18 - p.v * 16).toFixed(1)).join('') }));
+      spark.append(svgEl('path', { d: RS.rateIcon(RS.rates(a.shape, a.curve), 2, 2, 44, 16) }));
     };
     const edit = el('button', { type: 'button', class: 'ghost', title: 'Edit the rate-of-climb curve' }, 'Edit');
     edit.hidden = sel.value !== 'custom';
