@@ -8,6 +8,7 @@
   const P = window.ProfileLibrary;
   const A = window.Autotune;
   const RS = window.RampShape;
+  const RC = window.Records;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -80,6 +81,8 @@
     rampWarn: [], // [{i, k, node}] ramp feasibility notes in the recipe editor
     recipe: null, recipeSeq: null, // the board's getRecipe reply and the data "recipe.seq" it matches
     behind: { state: null, warn: false, lagC: NaN },
+    rec: { state: 'unknown', list: [], askedAt: 0, used: null, total: null, max: null, getIntent: {} }, // saved roasts
+    cooling: null, // the board's "cooling" flag in the last data
   };
   let worker = null;
 
@@ -158,7 +161,7 @@
       S.link = m.state;
       if (m.state !== 'open' || opened) S.dummy = null; // wait for the board's next data reply
       S.dirty = true;
-      if (opened) { requestLibrary(); S.recipeSeq = null; if (S.info.controls) askAutotune(); }
+      if (opened) { requestLibrary(); requestRoasts(); S.recipeSeq = null; if (S.info.controls) askAutotune(); }
     } else if (m.type === 'stats') {
       S.stats = m;
       if (S.tab === 'monitoring') S.dirty = true;
@@ -181,6 +184,7 @@
       watchUptime(msg.data.timer);
       watchStatus(msg.data);
       checkStop(msg.data);
+      watchCooldown(msg.data);
       if (S.info.controls) watchRecipe(msg.data);
       if (polled) addSample(msg.data, at);
       S.dirty = true;
@@ -188,6 +192,11 @@
     }
     if (msg.command === 'getControl') { S.control = msg.response || {}; S.controlAt = at; S.dirty = true; return; }
     if (msg.command === 'getDeviceInfo') { S.device = msg.response || {}; S.deviceAt = at; S.dirty = true; return; }
+    if (typeof msg.command === 'string' && /^roast(List|Get|Save|Delete)$/.test(msg.command)) {
+      onRoasts(msg.command, msg.response || {});
+      if (msg.command !== 'roastList' && msg.command !== 'roastGet') logReply(msg.response && msg.response.ok ? 'in' : 'err', '← ' + msg.command + (msg.response && msg.response.ok ? '' : ': ' + (msg.response || {}).error));
+      return;
+    }
     if (typeof msg.command === 'string' && /^library/.test(msg.command)) {
       onLibrary(msg.command, msg.response || {});
       if (msg.command !== 'libraryList') logReply(msg.response && msg.response.ok ? 'in' : 'err', '← ' + msg.command + (msg.response && msg.response.ok ? '' : ': ' + (msg.response || {}).error));
@@ -353,7 +362,7 @@
       }
       send({ command: 'stop' });
       expectStop();
-      if (recording()) endRoast();
+      if (recording()) { endRoast(); offerRoastSave(); }
     });
   }
 
@@ -444,6 +453,8 @@
     if (S.tab === 'live') { renderChart(); }
     if (S.tab === 'monitoring') renderMonitoring();
     if (S.tab === 'controls') { renderControls(); renderLibrary(); renderAutotune(); }
+    if (S.tab === 'roasts') renderRoasts();
+    renderSaveButton();
     if (S.tab === 'live') renderRecipeLive();
     let info;
     if (ss.length) {
@@ -883,6 +894,201 @@
     }
     $('#profile-status').textContent = 'Sent ' + steps.length + ' steps, waiting for the board…';
     send({ command: { profile: steps } });
+  }
+
+  // ---------- saved roasts ----------
+  // Roasts tab and Save to board: roasts kept on the board (records.js has the
+  // format). Saving is offered after STOP and again when the cooldown ends.
+  function recStatus(text, isError) {
+    const p = $('#rec-status');
+    p.textContent = text;
+    p.classList.toggle('err', !!isError);
+  }
+
+  function requestRoasts() {
+    if (!S.info.controls || S.link !== 'open') return;
+    if (S.rec.state !== 'ready') S.rec.state = 'waiting';
+    S.rec.askedAt = Date.now();
+    send({ command: 'roastList' }, true);
+    setTimeout(() => { S.dirty = true; }, LIB_TIMEOUT_MS + 100);
+  }
+
+  const sessionSavable = () => !recording() && S.session.samples.length > 1 && !S.session.savedId;
+
+  function renderSaveButton() {
+    const b = $('#save-roast');
+    const busy = P.busyReason(S.data);
+    b.disabled = S.rec.state !== 'ready' || !sessionSavable() || !!busy;
+    b.title = S.session.savedId ? 'Saved on the board' : busy ? 'Not while ' + busy
+      : S.rec.state !== 'ready' ? 'The board has no roast storage' : 'Save the last roast on the board';
+  }
+
+  // After STOP, and when the cooldown ends with the roast still unsaved.
+  function offerRoastSave() {
+    if (S.rec.state === 'ready' && sessionSavable() && !$('#roast-dialog').open) openRoastSave();
+  }
+  function watchCooldown(d) {
+    const was = S.cooling;
+    S.cooling = typeof d.cooling === 'boolean' ? d.cooling : null;
+    if (was === true && S.cooling === false) offerRoastSave();
+  }
+
+  function showLoss() {
+    const g = Number($('#rs-green').value), r = Number($('#rs-roasted').value);
+    const loss = $('#rs-green').value && $('#rs-roasted').value ? RC.lossPct(g, r) : null;
+    $('#rs-loss').textContent = loss === null ? '' : 'Weight loss ' + loss + ' %';
+  }
+
+  // Name, weights and notes of a saved roast; its curve stays as saved.
+  function openRoastEdit(id, roast) {
+    const dlg = $('#roast-dialog');
+    $('#roast-title').textContent = 'Edit saved roast';
+    $('#rs-name').value = roast.name || '';
+    $('#rs-green').value = isNum(roast.greenG) ? roast.greenG : '';
+    $('#rs-roasted').value = isNum(roast.roastedG) ? roast.roastedG : '';
+    $('#rs-notes').value = roast.notes || '';
+    dlg.dataset.for = '';
+    showLoss();
+    $('#rs-info').textContent = '';
+    dlg.returnValue = '';
+    dlg.onclose = () => {
+      if (dlg.returnValue !== 'ok') return;
+      const rec = Object.assign({}, roast);
+      for (const [k, sel] of [['greenG', '#rs-green'], ['roastedG', '#rs-roasted']]) {
+        if ($(sel).value === '') delete rec[k]; else rec[k] = Math.round(Number($(sel).value) * 10) / 10;
+      }
+      rec.name = $('#rs-name').value.trim() || rec.name;
+      const notes = $('#rs-notes').value.trim();
+      if (notes) rec.notes = notes; else delete rec.notes;
+      S.rec.pendingFor = null;
+      send({ command: 'roastSave', id, roast: rec }, true);
+      logReply('out', '→ roastSave ' + id);
+    };
+    dlg.showModal();
+  }
+
+  function openRoastSave() {
+    if (!sessionSavable()) return;
+    const dlg = $('#roast-dialog');
+    $('#roast-title').textContent = 'Save roast to board';
+    const ses = S.session;
+    const d = new Date(ses.startedAt);
+    if (!$('#rs-name').value || dlg.dataset.for !== String(ses.startedAt)) {
+      $('#rs-name').value = 'Roast ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      $('#rs-green').value = '';
+      $('#rs-roasted').value = '';
+      $('#rs-notes').value = '';
+      dlg.dataset.for = String(ses.startedAt);
+    }
+    showLoss();
+    const old = RC.pruneCandidate(S.rec.list, S.rec.max);
+    $('#rs-info').textContent = (old ? 'The board keeps ' + (S.rec.max || RC.MAX_ROASTS) + ' roasts: saving deletes the oldest, "' +
+      old.name + '". ' : '') + 'The roasted weight can be added later with Edit in the Roasts tab.';
+    dlg.returnValue = '';
+    dlg.onclose = () => { if (dlg.returnValue === 'ok') saveRoast(); };
+    dlg.showModal();
+  }
+
+  function saveRoast() {
+    const num = (id) => ($(id).value === '' ? null : Number($(id).value));
+    const name = $('#rs-name').value.trim() || 'Roast';
+    const rec = RC.buildRoast(S.session, { name, dateS: S.session.startedAt / 1000, greenG: num('#rs-green'),
+      roastedG: num('#rs-roasted'), notes: $('#rs-notes').value.trim() });
+    S.rec.pendingFor = S.session.startedAt;
+    send({ command: 'roastSave', roast: rec }, true);
+    logReply('out', '→ roastSave "' + name + '" (' + rec.bt.length + ' points every ' + rec.dt + ' s)');
+  }
+
+  function downloadText(name, text, type) {
+    const a = el('a', { download: name });
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function onRoasts(cmd, r) {
+    const why = () => P.message(r.error, r.reason) + (r.reason && r.error !== 'busy' ? ' (' + r.reason + ')' : '');
+    const fail = (what) => recStatus(what + ': ' + why() + '.', true);
+    if (cmd === 'roastList') {
+      if (!r.ok) { S.rec.state = 'unavailable'; S.rec.list = []; S.dirty = true; return; }
+      S.rec.state = 'ready';
+      S.rec.list = r.roasts || [];
+      S.rec.used = r.usedBytes; S.rec.total = r.totalBytes; S.rec.max = r.max;
+      recStatus(S.rec.list.length ? '' : 'No roasts saved yet. STOP a recorded roast to save it.');
+    } else if (cmd === 'roastGet') {
+      const intent = S.rec.getIntent[r.id];
+      delete S.rec.getIntent[r.id];
+      if (!r.ok) { fail('Not read'); return; }
+      const base = P.fileName(r.roast.name).replace(/\.json$/, '');
+      if (intent === 'json') downloadJson(r.roast.name, r.roast);
+      else if (intent === 'csv') downloadText(base + '.csv', RC.roastCsv(r.roast), 'text/csv');
+      else if (intent === 'edit') openRoastEdit(r.id, r.roast);
+      else if (intent === 'ref' && typeof setReference === 'function') setReference(r.roast);
+    } else if (cmd === 'roastSave') {
+      if (!r.ok) {
+        fail('Not saved');
+        logReply('err', 'roast not saved: ' + why() + (r.error === 'storage' ? '; board storage full or failing: delete old roasts' : ''));
+        return;
+      }
+      if (r.created && S.rec.pendingFor === S.session.startedAt) { S.session.savedId = r.id; saveSession(true); }
+      S.rec.pendingFor = null;
+      const pruned = (r.pruned || []).length;
+      recStatus('Saved.' + (pruned ? ' The oldest ' + (pruned > 1 ? pruned + ' roasts were' : 'roast was') + ' deleted to make room.' : ''));
+      logReply('in', 'roast saved as ' + r.id + (pruned ? ', deleted ' + r.pruned.join(', ') : ''));
+      requestRoasts();
+    } else if (cmd === 'roastDelete') {
+      if (!r.ok) { fail('Not deleted'); return; }
+      recStatus('Deleted.');
+      requestRoasts();
+    }
+    S.dirty = true;
+  }
+
+  function renderRoasts() {
+    const rec = S.rec;
+    if (rec.state === 'waiting' && Date.now() - rec.askedAt > LIB_TIMEOUT_MS) rec.state = 'unavailable';
+    const ready = rec.state === 'ready';
+    $('#rec-table').hidden = !ready || !rec.list.length;
+    if (rec.state === 'unavailable') recStatus('Roast storage unavailable: this firmware has none, or its storage did not mount.');
+    else if (!ready && S.link !== 'open') recStatus('Not connected.');
+    $('#rec-count').textContent = ready ? rec.list.length + ' of ' + (rec.max || RC.MAX_ROASTS) +
+      (isNum(rec.used) && isNum(rec.total) && rec.total ? ' · ' + Math.round(rec.used / 1024) + ' of ' + Math.round(rec.total / 1024) + ' KB' : '') : '';
+    const busy = P.busyReason(S.data);
+    const body = $('#rec-list');
+    const key = JSON.stringify(rec.list) + busy;
+    if (body.dataset.key === key) return;
+    body.dataset.key = key;
+    body.textContent = '';
+    for (const m of rec.list) {
+      const tr = el('tr');
+      tr.append(el('td', {}, m.date ? new Date(m.date * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—'));
+      tr.append(el('td', {}, m.name + (m.valid ? '' : ' (not valid)')));
+      tr.append(el('td', {}, m.beanName || '—'));
+      const loss = RC.lossPct(m.greenG, m.roastedG);
+      tr.append(el('td', {}, (isNum(m.greenG) ? m.greenG + ' g' : '—') + (isNum(m.roastedG) ? ' → ' + m.roastedG + ' g' : '') +
+        (loss === null ? '' : ' (' + loss + ' %)')));
+      const drop = (m.events || []).find((e) => e.code === 'DROP');
+      tr.append(el('td', {}, drop ? R.formatClock(drop.t) : '—'));
+      const td = el('td', { class: 'row-buttons' });
+      const btn = (label, cls, fn, disabled, title) => {
+        const b = el('button', { type: 'button', class: cls }, label);
+        if (disabled) b.disabled = true;
+        if (title) b.title = title;
+        b.addEventListener('click', fn);
+        td.append(b);
+      };
+      const fetch = (intent) => () => { rec.getIntent[m.id] = intent; send({ command: 'roastGet', id: m.id }, true); };
+      btn('Edit', 'ghost', fetch('edit'), !m.valid || !!busy, busy ? 'Not while ' + busy : 'Name, weights and notes');
+      btn('JSON', 'ghost', fetch('json'), !m.valid);
+      btn('CSV', 'ghost', fetch('csv'), !m.valid);
+      btn('Delete', 'ghost', () => confirmThen('Delete "' + m.name + '" from the board? Download it first to keep a copy.', () => {
+        send({ command: 'roastDelete', id: m.id });
+      }), !!busy, busy ? 'Not while ' + busy : '');
+      tr.append(td);
+      body.append(tr);
+    }
   }
 
   // ---------- device library ----------
@@ -1559,12 +1765,13 @@
   // Monitoring is the landing view; a #live or #controls in the URL opens that view.
   // Opening a view only changes what is drawn: it sends nothing and records nothing.
   function setTab(tab) {
-    if (tab === 'controls' && !S.info.controls) tab = 'monitoring';
-    if (!['live', 'monitoring', 'controls'].includes(tab)) tab = 'monitoring';
+    if ((tab === 'controls' || tab === 'roasts') && !S.info.controls) tab = 'monitoring';
+    if (!['live', 'monitoring', 'controls', 'roasts'].includes(tab)) tab = 'monitoring';
     S.tab = tab;
     for (const p of $$('[data-panel]')) p.hidden = p.dataset.panel !== tab;
     for (const a of $$('[data-tab]')) a.classList.toggle('active', a.dataset.tab === tab);
     if (tab === 'controls' && S.lib.state !== 'ready') requestLibrary();
+    if (tab === 'roasts') requestRoasts();
     render();
   }
 
@@ -1793,6 +2000,9 @@
     $('#new-roast').addEventListener('click', () => startRoast());
     $('#csv').addEventListener('click', downloadCsv);
     $('#clear-roast').addEventListener('click', clearRoast);
+    $('#save-roast').addEventListener('click', openRoastSave);
+    $('#rec-refresh').addEventListener('click', requestRoasts);
+    for (const id of ['#rs-green', '#rs-roasted']) $(id).addEventListener('input', showLoss);
 
     const chart = $('#chart');
     chart.addEventListener('pointermove', onChartPointer);

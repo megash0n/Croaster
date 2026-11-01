@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Saved roasts.** After STOP, and again when the cooldown ends, the page
+  offers to save the roast on the board with a name, green and roasted
+  weights (weight loss shown) and notes. A record (version 1) holds the
+  date, unit, events and the BT/ET curve from charge, thinned to fit 900
+  points and 13 000 bytes (the board's WebSocket message limit). The board
+  keeps the newest 25 in `/roasts` on LittleFS (the spare data partition);
+  a save when full deletes the oldest, and the save dialog names it first.
+  A failed write deletes the oldest once and retries. Saving and deleting
+  are refused while the heater is on or a profile or autotune runs. The
+  Roasts tab lists them with JSON and CSV download, Edit (name, weights,
+  notes) and Delete. Commands: `roastList`, `roastGet`, `roastSave`,
+  `roastDelete` (PID build only, with the device library).
 - **Cooldown end.** After a stop or a safety trip the fan runs at the
   cooldown speed until ET falls below a set temperature (default 140 °F /
   60 °C, `CPID_COOLDOWN_END_C`), then turns off and the roaster is idle.

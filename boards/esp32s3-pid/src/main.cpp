@@ -122,6 +122,8 @@ RecipePlugin recipes(controller, plugin); // recipe steps run on the board (core
 #if CPID_ENABLE_LIBRARY
 #    include <app/LibraryPlugin.h>
 LibraryPlugin library(controller); // profile library on LittleFS (Controls > Device library)
+#    include <app/RecordsPlugin.h>
+RecordsPlugin roastRecords(controller); // saved roasts on the same LittleFS
 #endif
 
 #if CMON_ENABLE_WEBUI
@@ -204,6 +206,8 @@ void setup() {
     library.begin(); // mounts LittleFS; the outputs are already safe
     library.attach(app);
     library.setRecipes(&recipes);
+    roastRecords.begin();
+    roastRecords.attach(app);
 #endif
 #if CMON_DISPLAY == CMON_DISPLAY_SSD1306
     display.setHeaderText([]() {

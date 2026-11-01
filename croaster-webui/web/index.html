@@ -42,6 +42,7 @@
       <a href="#monitoring" data-tab="monitoring">Monitoring</a>
       <a href="#live" data-tab="live">Live</a>
       <a href="#controls" data-tab="controls" data-needs="controls" hidden>Controls</a>
+      <a href="#roasts" data-tab="roasts" data-needs="controls" hidden>Roasts</a>
     </nav>
     <div class="side-block">
       <h3>Events</h3>
@@ -52,6 +53,7 @@
       <div class="row-buttons">
         <button type="button" id="csv">Download CSV</button>
         <button type="button" id="clear-roast" disabled title="Delete the last roast from this browser">Clear roast</button>
+        <button type="button" id="save-roast" data-needs="controls" hidden disabled>Save to board</button>
       </div>
       <p class="muted small" id="session-info"></p>
     </div>
@@ -336,6 +338,19 @@
         </div>
       </div>
     </section>
+    <section id="tab-roasts" data-panel="roasts" hidden>
+      <div class="cards">
+        <div class="card">
+          <h2>Saved roasts <small class="muted" id="rec-count"></small></h2>
+          <p class="small" id="rec-status">Checking the board…</p>
+          <table class="profile" id="rec-table" hidden>
+            <thead><tr><th>Date</th><th>Name</th><th>Bean</th><th>Green → roasted</th><th>Time</th><th></th></tr></thead>
+            <tbody id="rec-list"></tbody>
+          </table>
+          <div class="row-buttons"><button type="button" class="ghost" id="rec-refresh">Refresh</button></div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -361,6 +376,24 @@
     <div class="row-buttons">
       <button value="cancel" class="ghost">Cancel</button>
       <button value="ok">Use curve</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="roast-dialog" aria-labelledby="roast-title">
+  <form method="dialog" class="roast-form">
+    <h2 id="roast-title">Save roast to board</h2>
+    <label>Name <input type="text" id="rs-name" maxlength="40"></label>
+    <div class="row-buttons">
+      <label>Green weight in <input type="number" id="rs-green" min="0" max="100000" step="0.1" inputmode="decimal"> g</label>
+      <label>Roasted weight out <input type="number" id="rs-roasted" min="0" max="100000" step="0.1" inputmode="decimal"> g</label>
+    </div>
+    <p class="small" id="rs-loss"></p>
+    <label>Notes <textarea id="rs-notes" rows="2" maxlength="1024"></textarea></label>
+    <p class="small muted" id="rs-info"></p>
+    <div class="row-buttons">
+      <button value="cancel" class="ghost">Not now</button>
+      <button value="ok">Save</button>
     </div>
   </form>
 </dialog>
@@ -446,6 +479,7 @@
 <script src="library.js"></script>
 <script src="autotune.js"></script>
 <script src="ramp.js"></script>
+<script src="records.js"></script>
 <script src="link.js"></script>
 <script src="app.js"></script>
 </body>

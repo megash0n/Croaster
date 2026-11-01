@@ -226,7 +226,11 @@ main { min-width: 0; display: flex; flex-direction: column; gap: var(--gap); }
 .lib-save { display: grid; gap: 8px; }
 .lib-save label { display: grid; gap: 4px; }
 .lib-save input[type="text"] { max-width: 24em; }
-.lib-save textarea {
+.roast-form { display: grid; gap: 8px; }
+.roast-form > label { display: grid; gap: 4px; }
+.roast-form input[type="number"] { width: 6em; }
+.roast-form h2 { margin-top: 0; }
+.lib-save textarea, .roast-form textarea {
   width: 100%; resize: vertical; font: inherit; color: var(--text); background: var(--panel-2);
   border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--pad-y) var(--pad-x);
 }

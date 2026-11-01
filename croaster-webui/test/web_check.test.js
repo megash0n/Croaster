@@ -83,7 +83,7 @@ test('samples are recorded only after an explicit start', () => {
 test('Monitoring is the first tab and the landing view; Start sits beside STOP', () => {
   const app = read('app.js');
   const tabs = [...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tabs, ['monitoring', 'live', 'controls']);
+  assert.deepEqual(tabs, ['monitoring', 'live', 'controls', 'roasts']);
   assert.match(html, /<section id="tab-monitoring" data-panel="monitoring">/);
   assert.match(html, /<section id="tab-live" data-panel="live" hidden>/);
   assert.match(app, /tab: 'monitoring',/);
@@ -108,7 +108,8 @@ test('Start sends nothing to the board; event marks send only roastEvent', () =>
 
 test('the page sends commands only from user actions', () => {
   // Every send() call site. Loading the page or switching views reaches none of
-  // them, except the read-only libraryList (link open, Controls tab), getRecipe
+  // them, except the read-only libraryList (link open, Controls tab) and roastList
+  // (link open, Roasts tab), getRecipe
   // (the data payload's recipe.seq changed) and getAutotune (link open, status
   // change, timer while a run or its results are pending); the worker's polls (getArtisanData,
   // getControl, getDeviceInfo) are read-only too. A new command needs an entry here.
@@ -118,6 +119,11 @@ test('the page sends commands only from user actions', () => {
     "send({ command: 'stop' });",
     'send({ command: { [key]: value } }); // one command per click',
     'send({ command: { profile: steps } });',
+    "send({ command: 'roastList' }, true);",
+    "send({ command: 'roastSave', id, roast: rec }, true);",
+    "send({ command: 'roastSave', roast: rec }, true);",
+    "const fetch = (intent) => () => { rec.getIntent[m.id] = intent; send({ command: 'roastGet', id: m.id }, true); };",
+    "send({ command: 'roastDelete', id: m.id });",
     "send({ command: 'libraryList' });",
     "send(Object.assign({ command: 'librarySave', profile }, extra));",
     "if (r.recipe) send({ command: 'getRecipe' });",
@@ -147,7 +153,7 @@ test('the page sends commands only from user actions', () => {
 
 test('the shared modules app.js uses load before it', () => {
   const app = read('app.js');
-  for (const [global, file] of [['Roast', 'roast.js'], ['ProfileLibrary', 'library.js'], ['Autotune', 'autotune.js'], ['RampShape', 'ramp.js']]) {
+  for (const [global, file] of [['Roast', 'roast.js'], ['ProfileLibrary', 'library.js'], ['Autotune', 'autotune.js'], ['RampShape', 'ramp.js'], ['Records', 'records.js']]) {
     assert.ok(app.includes('window.' + global), file);
     assert.ok(html.indexOf('<script src="' + file + '"></script>') >= 0 && html.indexOf(file) < html.indexOf('app.js'), file);
   }

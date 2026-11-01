@@ -7,8 +7,8 @@ bool LittleFsLibraryStorage::mount() {
     // formatOnFail: a blank or foreign partition is formatted once; a mounted
     // file system is never formatted.
     mounted_ = LittleFS.begin(true, kMountPoint, 4, kPartition);
-    if (mounted_ && !LittleFS.exists(kDir))
-        mounted_ = LittleFS.mkdir(kDir);
+    if (mounted_ && !LittleFS.exists(dir_))
+        mounted_ = LittleFS.mkdir(dir_);
     return mounted_;
 }
 
@@ -23,7 +23,7 @@ size_t LittleFsLibraryStorage::totalBytes() const {
 bool LittleFsLibraryStorage::list(std::vector<std::string>& names) {
     if (!mounted_)
         return false;
-    File dir = LittleFS.open(kDir);
+    File dir = LittleFS.open(dir_);
     if (!dir || !dir.isDirectory())
         return false;
     for (File f = dir.openNextFile(); f; f = dir.openNextFile())
@@ -37,7 +37,7 @@ bool LittleFsLibraryStorage::read(const std::string& name, std::string& out) {
     if (!f)
         return false;
     const size_t n = f.size();
-    if (n > 2 * proflib::kMaxFileBytes) // not one of ours; do not pull it into RAM
+    if (n > 32768) // not one of ours; do not pull it into RAM
         return false;
     out.resize(n);
     const bool ok = n == 0 || f.read(reinterpret_cast<uint8_t*>(&out[0]), n) == n;

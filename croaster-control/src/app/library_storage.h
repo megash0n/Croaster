@@ -2,7 +2,8 @@
 // LittleFS backend for the profile library (core/profile_library.h). Mounts the
 // file system on the "spiffs" partition of the stock 16 MB table (3.4 MB, unused
 // by Croaster), so no partition change and no USB flash is needed; OTA writes
-// only the app slots and keeps it. Built when CPID_ENABLE_LIBRARY is 1.
+// only the app slots and keeps it. Profiles are in kDir; saved roasts use
+// their own directory on the same file system. Built when CPID_ENABLE_LIBRARY is 1.
 #if defined(CPID_ENABLE_LIBRARY) && CPID_ENABLE_LIBRARY
 #    include <core/profile_library.h>
 
@@ -12,8 +13,11 @@ public:
     static constexpr const char* kMountPoint = "/littlefs";
     static constexpr const char* kDir = "/profiles";
 
+    explicit LittleFsLibraryStorage(const char* dir = kDir)
+        : dir_(dir) {}
+
     // Mounts (formatting only when the mount fails, e.g. a blank partition) and
-    // creates kDir.
+    // creates the directory. Mounting again is harmless.
     bool mount();
     bool mounted() const {
         return mounted_;
@@ -28,9 +32,10 @@ public:
     bool remove(const std::string& name) override;
 
 private:
-    static std::string path(const std::string& name) {
-        return std::string(kDir) + "/" + name;
+    std::string path(const std::string& name) const {
+        return std::string(dir_) + "/" + name;
     }
+    const char* dir_;
     bool mounted_ = false;
 };
 #endif

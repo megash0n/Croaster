@@ -1461,6 +1461,7 @@ void runFanTests();
 void runWebSocketTests();
 void runDummyTests();
 void runRampShapeTests();
+void runRecordTests();
 
 int main() {
     UNITY_BEGIN();
@@ -1527,5 +1528,6 @@ int main() {
     runWebSocketTests(); // test_websocket.cpp
     runDummyTests();     // test_dummy.cpp
     runRampShapeTests(); // test_ramp_shape.cpp
+    runRecordTests();    // test_records.cpp
     return UNITY_END();
 }
