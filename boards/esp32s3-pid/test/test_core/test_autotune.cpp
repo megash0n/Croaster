@@ -15,6 +15,7 @@
 #include "core/autotune_status.h"
 #include "core/control_protocol.h"
 #include "core/fan_assist.h"
+#include "app/config_store.h"
 #include "core/roaster_model.h"
 #include "core/pid.h"
 #include "core/recipe.h"
@@ -1054,6 +1055,11 @@ void test_fan_assist_bounds() {
     fanassist::Inputs manual = in;
     manual.mode = Mode::Manual; // stop and cooldown run in Manual
     TEST_ASSERT_EQUAL_FLOAT(0, a.update(st, manual, 0.25f));
+    fanassist::Inputs profile = in; // auto modes: PID and Profile
+    profile.mode = Mode::Profile;
+    TEST_ASSERT_TRUE(a.update(st, profile, 0.25f) > 0);
+    // On by default; the controller enables it only with a saved fan test.
+    TEST_ASSERT_TRUE(ControlSettings{}.fanAssist);
     fanassist::Inputs tuning = in;
     tuning.mode = Mode::Autotune;
     TEST_ASSERT_EQUAL_FLOAT(0, a.update(st, tuning, 0.25f));
