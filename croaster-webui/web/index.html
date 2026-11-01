@@ -43,6 +43,7 @@
       <a href="#live" data-tab="live">Live</a>
       <a href="#controls" data-tab="controls" data-needs="controls" hidden>Controls</a>
       <a href="#roasts" data-tab="roasts" data-needs="controls" hidden>Roasts</a>
+      <a href="#beans" data-tab="beans" data-needs="controls" hidden>Beans</a>
     </nav>
     <div class="side-block">
       <h3>Events</h3>
@@ -83,10 +84,10 @@
             <span class="key heat" data-field="BurnerVal">Heater</span><span class="key fan" data-field="FanVal">Fan</span>
             <span class="key ref" id="key-ref" hidden></span>
           </div>
-          <button type="button" class="ghost" id="ref-btn" data-needs="controls" hidden title="Overlay a saved roast">Ref</button>
           <label class="toggle" title="Least-squares slope of BT over the last 30 s, times 60">
             <input type="checkbox" id="ror-smooth"> Smoothed RoR (30 s)
           </label>
+          <button type="button" class="ghost" id="ref-btn" data-needs="controls" hidden title="Overlay a saved roast">Ref</button>
         </div>
         <svg id="chart" class="chart" role="img" aria-label="BT, ET and RoR over time"></svg>
         <svg id="strips" class="strips" data-field="BurnerVal" role="img" aria-label="Heater and fan over time"></svg>
@@ -345,11 +346,29 @@
         <div class="card">
           <h2>Saved roasts <small class="muted" id="rec-count"></small></h2>
           <p class="small" id="rec-status">Checking the board…</p>
+          <p class="small" id="rec-filter" hidden><span id="rec-filter-text"></span> <button type="button" class="ghost" id="rec-filter-clear">Show all</button></p>
           <table class="profile" id="rec-table" hidden>
             <thead><tr><th>Date</th><th>Name</th><th>Bean</th><th>Green → roasted</th><th>Time</th><th></th></tr></thead>
             <tbody id="rec-list"></tbody>
           </table>
           <div class="row-buttons"><button type="button" class="ghost" id="rec-refresh">Refresh</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-beans" data-panel="beans" hidden>
+      <div class="cards">
+        <div class="card">
+          <h2>Green coffee <small class="muted" id="bean-count"></small></h2>
+          <p class="small" id="bean-status">Checking the board…</p>
+          <table class="profile" id="bean-table" hidden>
+            <thead><tr><th></th><th>Name</th><th>Origin</th><th>Process</th><th>On hand</th><th>Roasts</th><th></th></tr></thead>
+            <tbody id="bean-list"></tbody>
+          </table>
+          <div class="row-buttons">
+            <button type="button" id="bean-add">Add bean</button>
+            <button type="button" class="ghost" id="bean-refresh">Refresh</button>
+          </div>
         </div>
       </div>
     </section>
@@ -391,6 +410,7 @@
       <label>Roasted weight out <input type="number" id="rs-roasted" min="0" max="100000" step="0.1" inputmode="decimal"> g</label>
     </div>
     <p class="small" id="rs-loss"></p>
+    <label>Bean <select id="rs-bean"></select></label>
     <label>Notes <textarea id="rs-notes" rows="2" maxlength="1024"></textarea></label>
     <p class="small muted" id="rs-info"></p>
     <div class="row-buttons">
@@ -399,6 +419,57 @@
     </div>
   </form>
 </dialog>
+
+<dialog id="bean-dialog" aria-labelledby="bean-title">
+  <form method="dialog" class="roast-form bean-form">
+    <h2 id="bean-title">Bean</h2>
+    <label>Name * <input type="text" id="bf-name" maxlength="40" required></label>
+    <div class="bean-grid">
+      <label>Origin * <input type="text" id="bf-origin" maxlength="60" list="ref-countries" required></label>
+      <label>Process * <input type="text" id="bf-process" maxlength="60" list="ref-processes" required></label>
+      <label>Region <input type="text" id="bf-region" maxlength="60" list="ref-regions"></label>
+      <label>Varietal <input type="text" id="bf-varietal" maxlength="60" list="ref-varietals"></label>
+      <label>Farm or station <input type="text" id="bf-farm" maxlength="60"></label>
+      <label>Harvest <input type="text" id="bf-harvest" maxlength="20" placeholder="2026-01"></label>
+      <label>Altitude min (masl) <input type="number" id="bf-altitudeMin" min="0" max="9000"></label>
+      <label>Altitude max (masl) <input type="number" id="bf-altitudeMax" min="0" max="9000"></label>
+      <label>Moisture % <input type="number" id="bf-moisture" min="0" max="30" step="0.1"></label>
+      <label>Density <input type="text" id="bf-density" maxlength="6" list="ref-density" placeholder="high or g/L"></label>
+      <label>Cupping score <input type="number" id="bf-score" min="0" max="100" step="0.25"></label>
+      <label>Link <input type="url" id="bf-link" maxlength="200"></label>
+    </div>
+    <p class="small muted" id="bf-process-text"></p>
+    <label>Flavour notes <input type="text" id="bf-flavours" placeholder="comma separated"></label>
+    <label>Notes <textarea id="bf-notes" rows="2" maxlength="1024"></textarea></label>
+    <div class="row-buttons">
+      <label class="small"><input type="checkbox" id="bf-favourite"> Favourite</label>
+      <label class="small"><input type="checkbox" id="bf-blend"> Blend</label>
+    </div>
+    <div id="bf-blend-box" hidden>
+      <div id="bf-components"></div>
+      <button type="button" class="ghost" id="bf-add-component">Add component</button>
+    </div>
+    <h3>Inventory</h3>
+    <div class="row-buttons">
+      <label>On hand <input type="number" id="bf-stock" min="0" max="1000000" step="1"> g</label>
+    </div>
+    <div class="row-buttons">
+      <label>Purchase <input type="number" id="bf-buy" min="0" step="0.01"></label>
+      <select id="bf-buy-unit" aria-label="Unit"><option>g</option><option selected>kg</option><option>lb</option></select>
+      <label>Price <input type="number" id="bf-price" min="0" step="0.01"></label>
+      <label>Date <input type="date" id="bf-date"></label>
+    </div>
+    <ul class="small event-list" id="bf-purchases"></ul>
+    <p class="small err" id="bf-error"></p>
+    <div class="row-buttons">
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      <button value="ok">Save</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="ref-countries"></datalist><datalist id="ref-processes"></datalist>
+<datalist id="ref-regions"></datalist><datalist id="ref-varietals"></datalist>
+<datalist id="ref-density"><option value="high"></option><option value="medium"></option><option value="low"></option></datalist>
 
 <dialog id="ref-dialog" aria-labelledby="ref-title">
   <form method="dialog" class="roast-form">

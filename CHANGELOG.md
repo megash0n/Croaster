@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Green coffee beans.** A Beans tab keeps bean records on the board
+  (version 1, `/beans`, up to 100; a full store refuses rather than delete
+  anything). Name, origin and process are required; region, varietal, farm,
+  altitude range (masl), moisture %, density (high/medium/low or g/L),
+  harvest, cupping score, flavour notes, notes, link, favourite and blend
+  components (origin, process, percent) are optional. Purchases in g, kg or
+  lb, with an optional price and date, add to the stock on hand, which can
+  also be corrected by hand. The roast save dialog links a roast to a bean,
+  and a new saved roast takes its green weight off that bean's stock (not
+  below zero; deleting the roast does not put it back). Each bean lists its
+  roasts. The form suggests countries (with ISO codes), regions, varietals
+  and 12 processes with short descriptions from `coffee-ref.json`, loaded
+  when the form first opens; any text is accepted and the file is easy to
+  extend. Commands: `beanList`, `beanGet`, `beanSave`, `beanDelete`; the
+  `roastSave` reply reports the new stock.
 - **Reference roast.** The Ref button on the graph picks a saved roast and
   draws its BT curve dashed, with its event markers along the bottom,
   aligned at charge (at the recording start before charge). The view widens

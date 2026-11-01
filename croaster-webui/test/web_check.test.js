@@ -83,7 +83,7 @@ test('samples are recorded only after an explicit start', () => {
 test('Monitoring is the first tab and the landing view; Start sits beside STOP', () => {
   const app = read('app.js');
   const tabs = [...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tabs, ['monitoring', 'live', 'controls', 'roasts']);
+  assert.deepEqual(tabs, ['monitoring', 'live', 'controls', 'roasts', 'beans']);
   assert.match(html, /<section id="tab-monitoring" data-panel="monitoring">/);
   assert.match(html, /<section id="tab-live" data-panel="live" hidden>/);
   assert.match(app, /tab: 'monitoring',/);
@@ -124,6 +124,10 @@ test('the page sends commands only from user actions', () => {
     "send({ command: 'roastSave', roast: rec }, true);",
     "const fetch = (intent) => () => { rec.getIntent[m.id] = intent; send({ command: 'roastGet', id: m.id }, true); };",
     "send({ command: 'roastDelete', id: m.id });",
+    "send({ command: 'beanList' }, true);",
+    "btn('Edit', () => { bs.getIntent[b.id] = 'edit'; send({ command: 'beanGet', id: b.id }, true); }, !!busy, no);",
+    "send({ command: 'beanDelete', id: b.id });",
+    "send(id ? { command: 'beanSave', id, bean: rec } : { command: 'beanSave', bean: rec }, true);",
     "send({ command: 'roastGet', id }, true);",
     "send({ command: 'libraryList' });",
     "send(Object.assign({ command: 'librarySave', profile }, extra));",
@@ -228,4 +232,15 @@ test('Ref overlays a saved roast: read with roastGet, drawn dashed from its char
   assert.match(app, /class: 'ref-bt'/);
   assert.match(app, /x\(t0 \+ p\.t\)/); // reference t counts from its charge
   assert.match(css, /\.chart \.ref-bt \{[^}]*stroke-dasharray/);
+});
+
+test('coffee-ref.json: ISO country codes, regions of listed countries, 12 described processes', () => {
+  const ref = JSON.parse(read('coffee-ref.json'));
+  const names = ref.countries.map(([n]) => n);
+  assert.equal(new Set(names).size, names.length);
+  for (const [, iso] of ref.countries) assert.match(iso, /^[A-Z]{2}$/);
+  for (const c of Object.keys(ref.regions)) assert.ok(names.includes(c), c);
+  assert.equal(ref.processes.length, 12);
+  for (const [n, d] of ref.processes) assert.ok(n && d && d.length < 100, n);
+  assert.match(html, /id="bf-name" maxlength="40" required/);
 });

@@ -57,3 +57,24 @@ test('pruneCandidate: the oldest once the board keeps 25', () => {
   assert.strictEqual(RC.pruneCandidate(list.slice(0, 24)), null);
   assert.strictEqual(RC.pruneCandidate(list).id, 'r24');
 });
+
+test('beans: form text becomes a record, purchases add stock', () => {
+  const b = RC.beanFromForm({ name: ' Nyeri AA ', origin: 'Kenya', process: 'washed', region: '', altitudeMin: '1700',
+    altitudeMax: '', density: 'High', flavours: 'blackcurrant, grapefruit,', score: '87.5', favourite: true,
+    blend: false, components: [{ origin: 'Brazil' }] }, { stockG: 100, purchases: [] });
+  assert.deepEqual(b, { version: 1, name: 'Nyeri AA', origin: 'Kenya', process: 'washed', altitudeMin: 1700,
+    score: 87.5, density: 'high', flavours: ['blackcurrant', 'grapefruit'], favourite: true, stockG: 100, purchases: [] });
+  assert.equal(RC.beanFromForm({ name: 'x', origin: 'y', process: 'z', density: '720' }).density, 720);
+  const blend = RC.beanFromForm({ name: 'House', origin: 'Blend', process: 'mixed', blend: true,
+    components: [{ origin: 'Brazil', process: 'natural', percent: '60' }, { origin: '', process: '' }] });
+  assert.deepEqual(blend.components, [{ origin: 'Brazil', process: 'natural', percent: 60 }]);
+  let s = RC.addPurchase({ name: 'x' }, { amount: '2', unit: 'lb', price: '18', date: '2026-02-10' });
+  assert.equal(s.stockG, 907.2);
+  assert.deepEqual(s.purchases, [{ g: 907.2, price: 18, date: '2026-02-10' }]);
+  s = RC.addPurchase(s, { amount: '1', unit: 'kg' });
+  assert.equal(s.stockG, 1907.2);
+  assert.equal(RC.addPurchase(s, { amount: '', unit: 'kg' }), s);
+  assert.equal(RC.stockText(1907.2), '1.91 kg');
+  assert.equal(RC.stockText(850), '850 g');
+  assert.equal(RC.stockText(undefined), '—');
+});

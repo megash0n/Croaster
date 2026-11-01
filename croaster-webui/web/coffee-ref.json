@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "about": "Suggestions for the bean form. Free text is always allowed; add entries here to extend the lists.",
+  "countries": [
+    ["Australia", "AU"], ["Bolivia", "BO"], ["Brazil", "BR"], ["Burundi", "BI"], ["Cameroon", "CM"],
+    ["China", "CN"], ["Colombia", "CO"], ["Costa Rica", "CR"], ["Côte d'Ivoire", "CI"], ["Cuba", "CU"],
+    ["DR Congo", "CD"], ["Dominican Republic", "DO"], ["Ecuador", "EC"], ["El Salvador", "SV"], ["Ethiopia", "ET"],
+    ["Guatemala", "GT"], ["Haiti", "HT"], ["Honduras", "HN"], ["India", "IN"], ["Indonesia", "ID"],
+    ["Jamaica", "JM"], ["Kenya", "KE"], ["Laos", "LA"], ["Madagascar", "MG"], ["Malawi", "MW"],
+    ["Mexico", "MX"], ["Myanmar", "MM"], ["Nepal", "NP"], ["Nicaragua", "NI"], ["Panama", "PA"],
+    ["Papua New Guinea", "PG"], ["Peru", "PE"], ["Philippines", "PH"], ["Puerto Rico", "PR"], ["Rwanda", "RW"],
+    ["Taiwan", "TW"], ["Tanzania", "TZ"], ["Thailand", "TH"], ["Timor-Leste", "TL"], ["Uganda", "UG"],
+    ["United States", "US"], ["Venezuela", "VE"], ["Vietnam", "VN"], ["Yemen", "YE"], ["Zambia", "ZM"],
+    ["Zimbabwe", "ZW"]
+  ],
+  "regions": {
+    "Brazil": ["Cerrado Mineiro", "Sul de Minas", "Mogiana", "Chapada Diamantina", "Espírito Santo"],
+    "Colombia": ["Huila", "Nariño", "Cauca", "Antioquia", "Tolima"],
+    "Costa Rica": ["Tarrazú", "West Valley", "Central Valley", "Tres Ríos"],
+    "El Salvador": ["Santa Ana", "Apaneca-Ilamatepec", "Chalatenango"],
+    "Ethiopia": ["Yirgacheffe", "Sidama", "Guji", "Limu", "Jimma", "Harrar"],
+    "Guatemala": ["Antigua", "Huehuetenango", "Atitlán", "Cobán", "Acatenango"],
+    "Honduras": ["Marcala", "Santa Bárbara", "Copán"],
+    "Indonesia": ["Sumatra", "Java", "Sulawesi", "Flores", "Bali"],
+    "Kenya": ["Nyeri", "Kirinyaga", "Kiambu", "Embu", "Murang'a"],
+    "Mexico": ["Chiapas", "Oaxaca", "Veracruz"],
+    "Panama": ["Boquete", "Volcán"],
+    "Peru": ["Cajamarca", "Cusco", "Junín", "Puno"],
+    "Rwanda": ["Nyamasheke", "Huye", "Rutsiro"],
+    "United States": ["Kona", "Ka'u"],
+    "Yemen": ["Haraz", "Bani Matar"]
+  },
+  "varietals": [
+    "Typica", "Bourbon", "Pink Bourbon", "Caturra", "Catuai", "Mundo Novo", "Pacamara", "Maragogipe",
+    "Gesha", "SL28", "SL34", "Ruiru 11", "Batian", "Castillo", "Catimor", "Sarchimor", "Villa Sarchi",
+    "Parainema", "Marsellesa", "Java", "Laurina", "Ethiopian landrace", "Robusta", "Liberica"
+  ],
+  "processes": [
+    ["washed", "Fruit removed and the beans fermented and washed before drying."],
+    ["natural", "Whole cherries dried with the fruit on, then hulled."],
+    ["honey white", "Skin removed, almost all of the sticky fruit layer washed off before drying."],
+    ["honey yellow", "Skin removed, a little of the fruit layer left on to dry."],
+    ["honey red", "Skin removed, much of the fruit layer left on and dried more slowly."],
+    ["honey black", "Skin removed, nearly all of the fruit layer left on and dried slowest."],
+    ["pulped natural", "Skin removed by machine and the beans dried with the fruit layer on."],
+    ["wet-hulled", "Parchment removed while the beans are still moist, then dried again."],
+    ["anaerobic", "Fermented in sealed tanks with little or no oxygen."],
+    ["carbonic maceration", "Whole cherries fermented in tanks filled with carbon dioxide."],
+    ["experimental", "Any other method: added yeasts, fruit, long or mixed fermentations."],
+    ["unknown", "Not stated by the seller."]
+  ]
+}

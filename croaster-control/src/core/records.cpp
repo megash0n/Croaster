@@ -70,6 +70,15 @@ bool series(JsonVariantConst v, size_t max, size_t& count) {
 }
 
 const char* const kRoastSummary[] = {"date", "unit", "bean", "beanName", "greenG", "roastedG", "events"};
+const char* const kBeanSummary[] = {"origin", "process", "region", "varietal", "blend", "favourite", "score", "stockG"};
+
+constexpr size_t kMaxField = 60; // region, varietal, farm, flavour, origin, process
+bool requiredText(JsonVariantConst v) {
+    return textOk(v, kMaxField);
+}
+bool optionalBool(JsonVariantConst v) {
+    return v.isNull() || v.is<bool>();
+}
 } // namespace
 
 const char* checkRoast(JsonObjectConst r) {
@@ -104,6 +113,69 @@ const char* checkRoast(JsonObjectConst r) {
 
 const Spec kRoastSpec = {1, kMaxRoasts, kMaxRoastBytes, true, "",
                          kRoastSummary, sizeof(kRoastSummary) / sizeof(kRoastSummary[0]), checkRoast};
+
+const char* checkBean(JsonObjectConst r) {
+    if (!requiredText(r["origin"]) || !requiredText(r["process"]))
+        return "origin and process are required";
+    for (const char* k : {"region", "varietal", "farm"})
+        if (!optionalText(r[k], kMaxField))
+            return "region, varietal and farm must be text up to 60 characters";
+    if (!optionalNumber(r["altitudeMin"], 0, 9000) || !optionalNumber(r["altitudeMax"], 0, 9000))
+        return "altitude must be 0..9000 m";
+    if (r["altitudeMin"].is<float>() && r["altitudeMax"].is<float>() &&
+        r["altitudeMin"].as<float>() > r["altitudeMax"].as<float>())
+        return "altitude min must not exceed max";
+    if (!optionalNumber(r["moisture"], 0, 30))
+        return "moisture must be 0..30 %";
+    JsonVariantConst d = r["density"];
+    if (!d.isNull() && !(d.is<float>() ? optionalNumber(d, 300, 1000)
+                                        : d.is<const char*>() && (!std::strcmp(d.as<const char*>(), "high") ||
+                                                                  !std::strcmp(d.as<const char*>(), "medium") ||
+                                                                  !std::strcmp(d.as<const char*>(), "low"))))
+        return "density must be high, medium, low or 300..1000 g/L";
+    if (!optionalText(r["harvest"], 20))
+        return "harvest must be a date or season up to 20 characters";
+    if (!optionalNumber(r["score"], 0, 100))
+        return "score must be 0..100";
+    if (!r["flavours"].isNull()) {
+        JsonArrayConst f = r["flavours"].as<JsonArrayConst>();
+        if (f.isNull() || f.size() > kMaxFlavours)
+            return "flavours must be a list of up to 16";
+        for (JsonVariantConst x : f)
+            if (!textOk(x, kMaxField))
+                return "each flavour must be text up to 60 characters";
+    }
+    if (!optionalText(r["notes"], proflib::kMaxNotesChars))
+        return "notes must be text up to 1024 characters";
+    if (!optionalText(r["link"], 200))
+        return "link must be up to 200 characters";
+    if (!optionalBool(r["blend"]) || !optionalBool(r["favourite"]))
+        return "blend and favourite must be true or false";
+    if (!r["components"].isNull()) {
+        JsonArrayConst c = r["components"].as<JsonArrayConst>();
+        if (c.isNull() || c.size() > kMaxComponents)
+            return "components must be a list of up to 8";
+        for (JsonVariantConst x : c)
+            if (!optionalText(x["origin"], kMaxField) || !optionalText(x["process"], kMaxField) ||
+                !optionalNumber(x["percent"], 0, 100))
+                return "each component has an origin, a process and a percent";
+    }
+    if (!optionalNumber(r["stockG"], 0, kMaxStockG))
+        return "stock must be 0..1000000 g";
+    if (!r["purchases"].isNull()) {
+        JsonArrayConst p = r["purchases"].as<JsonArrayConst>();
+        if (p.isNull() || p.size() > kMaxPurchases)
+            return "purchases must be a list of up to 50";
+        for (JsonVariantConst x : p)
+            if (!(x["g"].is<float>() && optionalNumber(x["g"], 0, kMaxStockG)) || !optionalNumber(x["price"], 0, 1e6) ||
+                !optionalText(x["date"], 20))
+                return "each purchase needs grams, with an optional price and date";
+    }
+    return nullptr;
+}
+
+const Spec kBeanSpec = {1, kMaxBeans, kMaxBeanBytes, false, "",
+                        kBeanSummary, sizeof(kBeanSummary) / sizeof(kBeanSummary[0]), checkBean};
 
 Error Store::validate(JsonObjectConst r, const char** reason) const {
     if (r.isNull())
@@ -298,6 +370,27 @@ Error Store::remove(const char* id) {
         return Error::Storage;
     drop(id);
     return Error::None;
+}
+
+Error useStock(Store& beans, const char* beanId, float greenG, float& stockG) {
+    stockG = -1;
+    std::string text;
+    const Error e = beans.get(beanId, text);
+    if (e != Error::None)
+        return e;
+    JsonDocument doc;
+    if (deserializeJson(doc, text) || !doc.is<JsonObject>())
+        return Error::Storage;
+    JsonObject b = doc.as<JsonObject>();
+    if (!b["stockG"].is<float>())
+        return Error::None;
+    const float left = std::max(0.0f, b["stockG"].as<float>() - std::max(0.0f, greenG));
+    b["stockG"] = std::round(left * 10) / 10;
+    Saved saved;
+    const Error w = beans.save(beanId, b, saved);
+    if (w == Error::None)
+        stockG = b["stockG"].as<float>();
+    return w;
 }
 
 } // namespace records

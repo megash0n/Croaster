@@ -30,7 +30,9 @@ const char* idOf(const JsonObject& json) {
 
 void RecordsPlugin::begin() {
     const bool ok = roastFs_.mount() && roasts_.begin();
-    Serial.printf("# Records: %s, %u roasts\n", ok ? "ready" : "unavailable", (unsigned)roasts_.list().size());
+    const bool beansOk = beanFs_.mount() && beans_.begin();
+    Serial.printf("# Records: roasts %s (%u), beans %s (%u)\n", ok ? "ready" : "unavailable",
+                  (unsigned)roasts_.list().size(), beansOk ? "ready" : "unavailable", (unsigned)beans_.list().size());
 }
 
 void RecordsPlugin::attach(CroasterApp& app) {
@@ -39,6 +41,10 @@ void RecordsPlugin::attach(CroasterApp& app) {
     c.onCommand("roastGet", [this](const JsonObject& json) { return get("roastGet", roasts_, json, "roast"); });
     c.onCommand("roastSave", [this](const JsonObject& json) { return saveRoast(json); });
     c.onCommand("roastDelete", [this](const JsonObject& json) { return remove("roastDelete", roasts_, json); });
+    c.onCommand("beanList", [this](const JsonObject&) { return list("beanList", beans_, beanFs_, "beans"); });
+    c.onCommand("beanGet", [this](const JsonObject& json) { return get("beanGet", beans_, json, "bean"); });
+    c.onCommand("beanSave", [this](const JsonObject& json) { return saveBean(json); });
+    c.onCommand("beanDelete", [this](const JsonObject& json) { return remove("beanDelete", beans_, json); });
 }
 
 String RecordsPlugin::list(const char* command, records::Store& store, LittleFsLibraryStorage& fs, const char* key) {
@@ -108,6 +114,35 @@ String RecordsPlugin::saveRoast(const JsonObject& json) {
     JsonArray p = r["pruned"].to<JsonArray>();
     for (const std::string& id : saved.pruned)
         p.add(id.c_str());
+    JsonObjectConst rec = json["roast"].as<JsonObjectConst>();
+    if (saved.created && rec["bean"].is<const char*>() && rec["greenG"].is<float>()) {
+        float left = -1;
+        const records::Error s = records::useStock(beans_, rec["bean"].as<const char*>(), rec["greenG"].as<float>(), left);
+        JsonObject st = r["stock"].to<JsonObject>();
+        st["bean"] = rec["bean"];
+        if (s == records::Error::None)
+            st["stockG"] = left;
+        else
+            st["error"] = proflib::errorCode(s);
+    }
+    return finishReply(doc);
+}
+
+String RecordsPlugin::saveBean(const JsonObject& json) {
+    if (const char* busy = proflib::busyReason(controller_.snapshot()))
+        return failure("beanSave", records::Error::Busy, busy);
+    if (!json["bean"].is<JsonObject>())
+        return failure("beanSave", records::Error::BadRequest);
+    records::Saved saved;
+    const char* reason = nullptr;
+    const records::Error e = beans_.save(idOf(json), json["bean"].as<JsonObjectConst>(), saved, &reason);
+    if (e != records::Error::None)
+        return failure("beanSave", e, reason);
+    JsonDocument doc;
+    JsonObject r = beginReply(doc, "beanSave");
+    r["ok"] = true;
+    r["id"] = saved.id.c_str();
+    r["created"] = saved.created;
     return finishReply(doc);
 }
 

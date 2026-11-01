@@ -13,6 +13,19 @@
 //   "dt" seconds from "start", in seconds from CHARGE (from the first sample
 //   when there was no CHARGE); null where a probe had no reading. "bean" (an
 //   id), "beanName", the weights in grams and "notes" are optional.
+//
+// Bean record v1 (directory "/beans", up to kMaxBeans; a full store refuses):
+//   {"version":1,"name":"Nyeri AA","origin":"Kenya","process":"washed",
+//    "region":"Nyeri","varietal":"SL28","farm":"...","altitudeMin":1700,"altitudeMax":1900,
+//    "moisture":10.5,"density":"high" or 720 (g/L),"harvest":"2026-01","score":87.5,
+//    "flavours":["blackcurrant","grapefruit"],"notes":"...","link":"https://...",
+//    "blend":true,"components":[{"origin":"Brazil","process":"natural","percent":60}],
+//    "favourite":true,"stockG":4200,
+//    "purchases":[{"g":5000,"price":42.5,"date":"2026-02-10"}]}
+//   name, origin and process are required; the rest are optional. Standard
+//   green-coffee specs: altitude in metres above sea level, moisture in
+//   percent, density as a class or in g/L, score on the 100-point cupping
+//   scale. "stockG" is the green weight on hand.
 #include <ArduinoJson.h>
 
 #include <cstddef>
@@ -30,6 +43,12 @@ constexpr size_t kMaxRoasts = 25;
 constexpr size_t kMaxRoastBytes = 13000; // one WebSocket message (15 KB) with its envelope
 constexpr size_t kMaxRoastPoints = 900;
 constexpr size_t kMaxRoastEvents = 16;
+constexpr size_t kMaxBeans = 100;
+constexpr size_t kMaxBeanBytes = 6000;
+constexpr size_t kMaxPurchases = 50;
+constexpr size_t kMaxComponents = 8;
+constexpr size_t kMaxFlavours = 16;
+constexpr float kMaxStockG = 1000000;
 
 struct Spec {
     int version;          // newest format this firmware reads
@@ -44,9 +63,12 @@ struct Spec {
 };
 
 extern const Spec kRoastSpec;
+extern const Spec kBeanSpec;
 
 // Why a roast record fails its checks; nullptr when it passes.
 const char* checkRoast(JsonObjectConst rec);
+// Why a bean record fails its checks; nullptr when it passes.
+const char* checkBean(JsonObjectConst rec);
 
 struct Meta {
     std::string id;
@@ -104,5 +126,10 @@ private:
     std::vector<Meta> index_;
     bool ready_ = false;
 };
+
+// Takes `greenG` off the bean's "stockG" (not below 0; a bean without stock
+// stays without) and saves it. `stockG` gets the new figure, or -1 when the
+// bean has no stock recorded.
+Error useStock(Store& beans, const char* beanId, float greenG, float& stockG);
 
 } // namespace records

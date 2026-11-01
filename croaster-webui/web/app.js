@@ -82,6 +82,8 @@
     recipe: null, recipeSeq: null, // the board's getRecipe reply and the data "recipe.seq" it matches
     behind: { state: null, warn: false, lagC: NaN },
     rec: { state: 'unknown', list: [], askedAt: 0, used: null, total: null, max: null, getIntent: {} }, // saved roasts
+    beans: { state: 'unknown', list: [], askedAt: 0, max: null, getIntent: {} }, // green-coffee records
+    coffeeRef: null, // coffee-ref.json, loaded when the bean form first opens
     cooling: null, // the board's "cooling" flag in the last data
     ref: null, refCache: null, // reference roast record shown on the chart; its curve in the page unit
   };
@@ -162,7 +164,7 @@
       S.link = m.state;
       if (m.state !== 'open' || opened) S.dummy = null; // wait for the board's next data reply
       S.dirty = true;
-      if (opened) { requestLibrary(); requestRoasts(); S.recipeSeq = null; if (S.info.controls) askAutotune(); }
+      if (opened) { requestLibrary(); requestRoasts(); requestBeans(); S.recipeSeq = null; if (S.info.controls) askAutotune(); }
     } else if (m.type === 'stats') {
       S.stats = m;
       if (S.tab === 'monitoring') S.dirty = true;
@@ -193,9 +195,13 @@
     }
     if (msg.command === 'getControl') { S.control = msg.response || {}; S.controlAt = at; S.dirty = true; return; }
     if (msg.command === 'getDeviceInfo') { S.device = msg.response || {}; S.deviceAt = at; S.dirty = true; return; }
+    if (typeof msg.command === 'string' && /^bean(List|Get|Save|Delete)$/.test(msg.command)) {
+      onBeans(msg.command, msg.response || {});
+      return;
+    }
     if (typeof msg.command === 'string' && /^roast(List|Get|Save|Delete)$/.test(msg.command)) {
       onRoasts(msg.command, msg.response || {});
-      if (msg.command !== 'roastList' && msg.command !== 'roastGet') logReply(msg.response && msg.response.ok ? 'in' : 'err', '← ' + msg.command + (msg.response && msg.response.ok ? '' : ': ' + (msg.response || {}).error));
+      if (msg.command === 'roastDelete') logReply(msg.response && msg.response.ok ? 'in' : 'err', '← ' + msg.command + (msg.response && msg.response.ok ? '' : ': ' + (msg.response || {}).error));
       return;
     }
     if (typeof msg.command === 'string' && /^library/.test(msg.command)) {
@@ -455,6 +461,7 @@
     if (S.tab === 'monitoring') renderMonitoring();
     if (S.tab === 'controls') { renderControls(); renderLibrary(); renderAutotune(); }
     if (S.tab === 'roasts') renderRoasts();
+    if (S.tab === 'beans') renderBeans();
     renderSaveButton();
     if (S.tab === 'live') renderRecipeLive();
     let info;
@@ -924,6 +931,12 @@
     p.classList.toggle('err', !!isError);
   }
 
+  // A list reply clears waiting and error notes but keeps the result of a save or delete.
+  function staleStatus(sel) {
+    const p = $(sel);
+    return p.classList.contains('err') || /^(Checking|No |Not connected|.*unavailable)/.test(p.textContent);
+  }
+
   function requestRoasts() {
     if (!S.info.controls || S.link !== 'open') return;
     if (S.rec.state !== 'ready') S.rec.state = 'waiting';
@@ -938,6 +951,7 @@
     const b = $('#save-roast');
     const busy = P.busyReason(S.data);
     b.disabled = S.rec.state !== 'ready' || !sessionSavable() || !!busy;
+    b.textContent = S.session.savedId ? 'Saved to board' : 'Save to board';
     b.title = S.session.savedId ? 'Saved on the board' : busy ? 'Not while ' + busy
       : S.rec.state !== 'ready' ? 'The board has no roast storage' : 'Save the last roast on the board';
   }
@@ -966,6 +980,7 @@
     $('#rs-green').value = isNum(roast.greenG) ? roast.greenG : '';
     $('#rs-roasted').value = isNum(roast.roastedG) ? roast.roastedG : '';
     $('#rs-notes').value = roast.notes || '';
+    fillBeanSelect(roast.bean || '');
     dlg.dataset.for = '';
     showLoss();
     $('#rs-info').textContent = '';
@@ -979,11 +994,30 @@
       rec.name = $('#rs-name').value.trim() || rec.name;
       const notes = $('#rs-notes').value.trim();
       if (notes) rec.notes = notes; else delete rec.notes;
+      delete rec.bean; delete rec.beanName;
+      Object.assign(rec, beanChoice()); // the link only: stock changes on the first save
       S.rec.pendingFor = null;
       send({ command: 'roastSave', id, roast: rec }, true);
       logReply('out', '→ roastSave ' + id);
     };
     dlg.showModal();
+  }
+
+  // The bean select in the roast dialog; `id` is preselected.
+  function fillBeanSelect(id) {
+    const sel = $('#rs-bean');
+    sel.textContent = '';
+    sel.append(el('option', { value: '' }, 'No bean'));
+    for (const b of S.beans.list) {
+      if (!b.valid) continue;
+      sel.append(el('option', { value: b.id }, (b.favourite ? '★ ' : '') + b.name + ' · ' + RC.stockText(b.stockG)));
+    }
+    sel.value = S.beans.list.some((b) => b.id === id) ? id : '';
+  }
+  function beanChoice() {
+    const id = $('#rs-bean').value;
+    const b = S.beans.list.find((m) => m.id === id);
+    return b ? { bean: b.id, beanName: b.name } : {};
   }
 
   function openRoastSave() {
@@ -997,12 +1031,13 @@
       $('#rs-green').value = '';
       $('#rs-roasted').value = '';
       $('#rs-notes').value = '';
+      fillBeanSelect(S.lastBean || '');
       dlg.dataset.for = String(ses.startedAt);
     }
     showLoss();
     const old = RC.pruneCandidate(S.rec.list, S.rec.max);
     $('#rs-info').textContent = (old ? 'The board keeps ' + (S.rec.max || RC.MAX_ROASTS) + ' roasts: saving deletes the oldest, "' +
-      old.name + '". ' : '') + 'The roasted weight can be added later with Edit in the Roasts tab.';
+      old.name + '". ' : '') + 'The green weight comes off the bean\'s stock. The roasted weight can be added later with Edit in the Roasts tab.';
     dlg.returnValue = '';
     dlg.onclose = () => { if (dlg.returnValue === 'ok') saveRoast(); };
     dlg.showModal();
@@ -1011,8 +1046,10 @@
   function saveRoast() {
     const num = (id) => ($(id).value === '' ? null : Number($(id).value));
     const name = $('#rs-name').value.trim() || 'Roast';
-    const rec = RC.buildRoast(S.session, { name, dateS: S.session.startedAt / 1000, greenG: num('#rs-green'),
-      roastedG: num('#rs-roasted'), notes: $('#rs-notes').value.trim() });
+    const bean = beanChoice();
+    S.lastBean = bean.bean || '';
+    const rec = RC.buildRoast(S.session, Object.assign({ name, dateS: S.session.startedAt / 1000, greenG: num('#rs-green'),
+      roastedG: num('#rs-roasted'), notes: $('#rs-notes').value.trim() }, bean));
     S.rec.pendingFor = S.session.startedAt;
     send({ command: 'roastSave', roast: rec }, true);
     logReply('out', '→ roastSave "' + name + '" (' + rec.bt.length + ' points every ' + rec.dt + ' s)');
@@ -1035,7 +1072,8 @@
       S.rec.state = 'ready';
       S.rec.list = r.roasts || [];
       S.rec.used = r.usedBytes; S.rec.total = r.totalBytes; S.rec.max = r.max;
-      recStatus(S.rec.list.length ? '' : 'No roasts saved yet. STOP a recorded roast to save it.');
+      if (!S.rec.list.length) recStatus('No roasts saved yet. STOP a recorded roast to save it.');
+      else if (staleStatus('#rec-status')) recStatus('');
     } else if (cmd === 'roastGet') {
       const intent = S.rec.getIntent[r.id];
       delete S.rec.getIntent[r.id];
@@ -1054,7 +1092,11 @@
       if (r.created && S.rec.pendingFor === S.session.startedAt) { S.session.savedId = r.id; saveSession(true); }
       S.rec.pendingFor = null;
       const pruned = (r.pruned || []).length;
-      recStatus('Saved.' + (pruned ? ' The oldest ' + (pruned > 1 ? pruned + ' roasts were' : 'roast was') + ' deleted to make room.' : ''));
+      const st = r.stock;
+      const stock = !st ? '' : st.error ? ' Bean stock not updated (' + P.message(st.error) + ').'
+        : isNum(st.stockG) && st.stockG >= 0 ? ' ' + RC.stockText(st.stockG) + ' of the bean left.' : '';
+      recStatus('Saved.' + (pruned ? ' The oldest ' + (pruned > 1 ? pruned + ' roasts were' : 'roast was') + ' deleted to make room.' : '') + stock);
+      if (st) requestBeans();
       logReply('in', 'roast saved as ' + r.id + (pruned ? ', deleted ' + r.pruned.join(', ') : ''));
       requestRoasts();
     } else if (cmd === 'roastDelete') {
@@ -1075,12 +1117,16 @@
     $('#rec-count').textContent = ready ? rec.list.length + ' of ' + (rec.max || RC.MAX_ROASTS) +
       (isNum(rec.used) && isNum(rec.total) && rec.total ? ' · ' + Math.round(rec.used / 1024) + ' of ' + Math.round(rec.total / 1024) + ' KB' : '') : '';
     const busy = P.busyReason(S.data);
+    const fb = rec.filter ? S.beans.list.find((b) => b.id === rec.filter) : null;
+    $('#rec-filter').hidden = !rec.filter;
+    $('#rec-filter-text').textContent = rec.filter ? 'Roasts of ' + (fb ? fb.name : rec.filter) + '.' : '';
+    const shown = rec.filter ? rec.list.filter((m) => m.bean === rec.filter) : rec.list;
     const body = $('#rec-list');
-    const key = JSON.stringify(rec.list) + busy;
+    const key = JSON.stringify(shown) + busy;
     if (body.dataset.key === key) return;
     body.dataset.key = key;
     body.textContent = '';
-    for (const m of rec.list) {
+    for (const m of shown) {
       const tr = el('tr');
       tr.append(el('td', {}, m.date ? new Date(m.date * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—'));
       tr.append(el('td', {}, m.name + (m.valid ? '' : ' (not valid)')));
@@ -1108,6 +1154,196 @@
       tr.append(td);
       body.append(tr);
     }
+  }
+
+  // ---------- beans ----------
+  // Beans tab: green coffee kept on the board (core/records.h has the record).
+  // A new roast saved with a bean takes its green weight off the stock.
+  function beanStatus(text, isError) {
+    const p = $('#bean-status');
+    p.textContent = text;
+    p.classList.toggle('err', !!isError);
+  }
+
+  function requestBeans() {
+    if (!S.info.controls || S.link !== 'open') return;
+    if (S.beans.state !== 'ready') S.beans.state = 'waiting';
+    S.beans.askedAt = Date.now();
+    send({ command: 'beanList' }, true);
+    setTimeout(() => { S.dirty = true; }, LIB_TIMEOUT_MS + 100);
+  }
+
+  function onBeans(cmd, r) {
+    const why = () => P.message(r.error, r.reason) + (r.reason && r.error !== 'busy' ? ' (' + r.reason + ')' : '');
+    if (cmd === 'beanList') {
+      if (!r.ok) { S.beans.state = 'unavailable'; S.beans.list = []; S.dirty = true; return; }
+      S.beans.state = 'ready';
+      S.beans.list = (r.beans || []).slice().sort((a, b) => (b.favourite ? 1 : 0) - (a.favourite ? 1 : 0) ||
+        String(a.name).localeCompare(String(b.name)));
+      S.beans.max = r.max;
+      if (!S.beans.list.length) beanStatus('No beans yet. Add one to track stock and link roasts to it.');
+      else if (staleStatus('#bean-status')) beanStatus('');
+    } else if (cmd === 'beanGet') {
+      const intent = S.beans.getIntent[r.id];
+      delete S.beans.getIntent[r.id];
+      if (!r.ok) { beanStatus('Not read: ' + why() + '.', true); return; }
+      if (intent === 'edit') openBeanEdit(r.id, r.bean);
+    } else if (cmd === 'beanSave' || cmd === 'beanDelete') {
+      if (!r.ok) {
+        const full = r.error === 'full' ? ' The board keeps ' + (S.beans.max || 100) + ' beans: delete one first.' : '';
+        const storage = r.error === 'storage' ? ' Board storage may be full: delete old roasts.' : '';
+        beanStatus((cmd === 'beanSave' ? 'Not saved: ' : 'Not deleted: ') + why() + '.' + full + storage, true);
+        logReply('err', '← ' + cmd + ': ' + why());
+        return;
+      }
+      beanStatus(cmd === 'beanSave' ? 'Saved.' : 'Deleted. Its roasts keep the bean name.');
+      requestBeans();
+    }
+    S.dirty = true;
+  }
+
+  function renderBeans() {
+    const bs = S.beans;
+    if (bs.state === 'waiting' && Date.now() - bs.askedAt > LIB_TIMEOUT_MS) bs.state = 'unavailable';
+    const ready = bs.state === 'ready';
+    $('#bean-table').hidden = !ready || !bs.list.length;
+    $('#bean-add').disabled = !ready;
+    if (bs.state === 'unavailable') beanStatus('Bean storage unavailable: this firmware has none, or its storage did not mount.');
+    else if (!ready && S.link !== 'open') beanStatus('Not connected.');
+    $('#bean-count').textContent = ready ? bs.list.length + ' of ' + (bs.max || 100) : '';
+    const busy = P.busyReason(S.data);
+    const counts = {};
+    for (const m of S.rec.list) if (m.bean) counts[m.bean] = (counts[m.bean] || 0) + 1;
+    const body = $('#bean-list');
+    const key = JSON.stringify(bs.list) + JSON.stringify(counts) + busy;
+    if (body.dataset.key === key) return;
+    body.dataset.key = key;
+    body.textContent = '';
+    for (const b of bs.list) {
+      const tr = el('tr');
+      tr.append(el('td', { title: b.favourite ? 'Favourite' : '' }, b.favourite ? '★' : ''));
+      tr.append(el('td', {}, b.name + (b.valid ? '' : ' (not valid)')));
+      tr.append(el('td', {}, (b.blend ? 'Blend · ' : '') + (b.origin || '—') + (b.region ? ', ' + b.region : '')));
+      tr.append(el('td', {}, b.process || '—'));
+      tr.append(el('td', { class: 'num' }, RC.stockText(b.stockG)));
+      tr.append(el('td', { class: 'num' }, String(counts[b.id] || 0)));
+      const td = el('td', { class: 'row-buttons' });
+      const btn = (label, fn, disabled, title) => {
+        const x = el('button', { type: 'button', class: 'ghost' }, label);
+        if (disabled) x.disabled = true;
+        if (title) x.title = title;
+        x.addEventListener('click', fn);
+        td.append(x);
+      };
+      const no = busy ? 'Not while ' + busy : '';
+      btn('Edit', () => { bs.getIntent[b.id] = 'edit'; send({ command: 'beanGet', id: b.id }, true); }, !!busy, no);
+      btn('Roasts', () => { S.rec.filter = b.id; location.hash = 'roasts'; }, !counts[b.id]);
+      btn('Delete', () => confirmThen('Delete "' + b.name + '" and its stock record from the board? Its roasts are kept.', () => {
+        send({ command: 'beanDelete', id: b.id });
+      }), !!busy, no);
+      tr.append(td);
+      body.append(tr);
+    }
+  }
+
+  // Suggestions for the form; free text is always accepted.
+  function loadCoffeeRef() {
+    if (S.coffeeRef) return;
+    S.coffeeRef = { countries: [], regions: {}, varietals: [], processes: [] };
+    fetch('coffee-ref.json').then((r) => (r.ok ? r.json() : null)).then((ref) => {
+      if (!ref) return;
+      S.coffeeRef = ref;
+      const fill = (id, rows) => {
+        const dl = $(id);
+        dl.textContent = '';
+        for (const [value, label] of rows) dl.append(el('option', label ? { value, label } : { value }));
+      };
+      fill('#ref-countries', (ref.countries || []).map(([n, iso]) => [n, iso]));
+      fill('#ref-processes', (ref.processes || []).map(([n, d]) => [n, d]));
+      fill('#ref-varietals', (ref.varietals || []).map((v) => [v]));
+      fillRegions();
+      showProcessText();
+    }).catch(() => {});
+  }
+  function fillRegions() {
+    const ref = S.coffeeRef;
+    if (!ref || !ref.regions) return;
+    const dl = $('#ref-regions');
+    dl.textContent = '';
+    for (const r of ref.regions[$('#bf-origin').value.trim()] || []) dl.append(el('option', { value: r }));
+  }
+  function showProcessText() {
+    const p = $('#bf-process').value.trim().toLowerCase();
+    const hit = ((S.coffeeRef && S.coffeeRef.processes) || []).find(([n]) => n === p);
+    $('#bf-process-text').textContent = hit ? hit[1] : '';
+  }
+
+  function addComponentRow(c) {
+    const row = el('div', { class: 'bean-comp' });
+    const input = (k, attrs) => { const i = el('input', Object.assign({ 'data-k': k, 'aria-label': k }, attrs)); i.value = c[k] === undefined ? '' : c[k]; row.append(i); };
+    input('origin', { type: 'text', list: 'ref-countries', placeholder: 'Origin', maxlength: '60' });
+    input('process', { type: 'text', list: 'ref-processes', placeholder: 'Process', maxlength: '60' });
+    input('percent', { type: 'number', min: '0', max: '100', placeholder: '%' });
+    const x = el('button', { type: 'button', class: 'ghost', title: 'Remove' }, '×');
+    x.addEventListener('click', () => row.remove());
+    row.append(x);
+    $('#bf-components').append(row);
+  }
+
+  const bf = (k) => document.getElementById('bf-' + k); // BEAN_FIELDS inputs
+  const BEAN_FIELDS = ['name', 'origin', 'process', 'region', 'varietal', 'farm', 'harvest', 'altitudeMin', 'altitudeMax',
+    'moisture', 'density', 'score', 'link', 'notes'];
+
+  // Add (id '') or edit a bean, with its stock: a correction sets the on-hand
+  // figure, a purchase adds to it.
+  function openBeanEdit(id, bean) {
+    loadCoffeeRef();
+    const dlg = $('#bean-dialog');
+    $('#bean-title').textContent = id ? 'Edit bean' : 'Add bean';
+    for (const k of BEAN_FIELDS) bf(k).value = bean[k] === undefined ? '' : bean[k];
+    $('#bf-flavours').value = (bean.flavours || []).join(', ');
+    $('#bf-favourite').checked = !!bean.favourite;
+    $('#bf-blend').checked = !!bean.blend;
+    $('#bf-blend-box').hidden = !bean.blend;
+    $('#bf-components').textContent = '';
+    for (const c of bean.components || []) addComponentRow(c);
+    $('#bf-stock').value = isNum(bean.stockG) ? bean.stockG : '';
+    $('#bf-buy').value = '';
+    $('#bf-price').value = '';
+    $('#bf-date').value = new Date().toISOString().slice(0, 10);
+    const list = $('#bf-purchases');
+    list.textContent = '';
+    for (const p of (bean.purchases || []).slice(-5).reverse()) {
+      list.append(el('li', {}, (p.date || '—') + ': ' + RC.stockText(p.g) + (isNum(p.price) ? ', price ' + p.price : '')));
+    }
+    $('#bf-error').textContent = '';
+    fillRegions();
+    showProcessText();
+    dlg.returnValue = '';
+    dlg.onclose = () => {
+      if (dlg.returnValue !== 'ok') return;
+      const f = {};
+      for (const k of BEAN_FIELDS) f[k] = bf(k).value;
+      f.flavours = $('#bf-flavours').value;
+      f.favourite = $('#bf-favourite').checked;
+      f.blend = $('#bf-blend').checked;
+      f.components = $$('.bean-comp', $('#bf-components')).map((row) => {
+        const o = {};
+        for (const i of $$('input', row)) o[i.dataset.k] = i.value;
+        return o;
+      });
+      let rec = RC.beanFromForm(f, bean);
+      const stock = $('#bf-stock').value.trim();
+      if (stock !== '' && isFinite(Number(stock))) rec.stockG = Math.max(0, Number(stock)); else delete rec.stockG;
+      rec = RC.addPurchase(rec, { amount: $('#bf-buy').value, unit: $('#bf-buy-unit').value,
+        price: $('#bf-price').value, date: $('#bf-date').value });
+      if (!rec.name || !rec.origin || !rec.process) {
+        beanStatus('Not saved: name, origin and process are required.', true);
+        return;
+      }
+      send(id ? { command: 'beanSave', id, bean: rec } : { command: 'beanSave', bean: rec }, true);
+    };
+    dlg.showModal();
   }
 
   // ---------- reference roast ----------
@@ -1832,13 +2068,13 @@
   // Monitoring is the landing view; a #live or #controls in the URL opens that view.
   // Opening a view only changes what is drawn: it sends nothing and records nothing.
   function setTab(tab) {
-    if ((tab === 'controls' || tab === 'roasts') && !S.info.controls) tab = 'monitoring';
-    if (!['live', 'monitoring', 'controls', 'roasts'].includes(tab)) tab = 'monitoring';
+    if (['controls', 'roasts', 'beans'].includes(tab) && !S.info.controls) tab = 'monitoring';
+    if (!['live', 'monitoring', 'controls', 'roasts', 'beans'].includes(tab)) tab = 'monitoring';
     S.tab = tab;
     for (const p of $$('[data-panel]')) p.hidden = p.dataset.panel !== tab;
     for (const a of $$('[data-tab]')) a.classList.toggle('active', a.dataset.tab === tab);
     if (tab === 'controls' && S.lib.state !== 'ready') requestLibrary();
-    if (tab === 'roasts') requestRoasts();
+    if (tab === 'roasts' || tab === 'beans') { requestRoasts(); requestBeans(); }
     render();
   }
 
@@ -2069,6 +2305,13 @@
     $('#clear-roast').addEventListener('click', clearRoast);
     $('#save-roast').addEventListener('click', openRoastSave);
     $('#ref-btn').addEventListener('click', openRefPicker);
+    $('#rec-filter-clear').addEventListener('click', () => { S.rec.filter = null; render(); });
+    $('#bean-add').addEventListener('click', () => openBeanEdit('', {}));
+    $('#bean-refresh').addEventListener('click', requestBeans);
+    $('#bf-blend').addEventListener('change', () => { $('#bf-blend-box').hidden = !$('#bf-blend').checked; });
+    $('#bf-add-component').addEventListener('click', () => addComponentRow({}));
+    $('#bf-process').addEventListener('input', showProcessText);
+    $('#bf-origin').addEventListener('input', fillRegions);
     $('#rec-refresh').addEventListener('click', requestRoasts);
     for (const id of ['#rs-green', '#rs-roasted']) $(id).addEventListener('input', showLoss);
 

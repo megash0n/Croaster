@@ -136,7 +136,67 @@ void test_roasts_keep_the_newest() {
     TEST_ASSERT_FALSE(again.list().back().valid); // "bad": date 0, listed last
 }
 
+const char* beanWhy(const char* extra) {
+    static std::string text;
+    text = std::string(R"({"version":1,"name":"Nyeri AA","origin":"Kenya","process":"washed")") + extra + "}";
+    static JsonDocument d;
+    d.clear();
+    deserializeJson(d, text);
+    return records::checkBean(d.as<JsonObjectConst>());
+}
+
+void test_bean_record_checks() {
+    TEST_ASSERT_NULL(beanWhy(""));
+    TEST_ASSERT_NULL(beanWhy(R"(,"region":"Nyeri","altitudeMin":1700,"altitudeMax":1900,"moisture":10.5,)"
+                             R"("density":"high","score":87.5,"flavours":["blackcurrant"],"blend":true,)"
+                             R"("components":[{"origin":"Brazil","process":"natural","percent":60}],)"
+                             R"("favourite":true,"stockG":4200,"purchases":[{"g":5000,"price":42.5,"date":"2026-02-10"}])"));
+    TEST_ASSERT_NULL(beanWhy(R"(,"density":720)"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"density":"dense")"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"density":50)"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"altitudeMin":2000,"altitudeMax":1500)"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"score":101)"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"stockG":-1)"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"purchases":[{"price":3}])"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"flavours":"berry")"));
+    TEST_ASSERT_NOT_NULL(beanWhy(R"(,"favourite":1)"));
+    JsonDocument d;
+    deserializeJson(d, R"({"version":1,"name":"No origin","process":"washed"})");
+    TEST_ASSERT_NOT_NULL(records::checkBean(d.as<JsonObjectConst>()));
+}
+
+void test_beans_refuse_when_full_and_roasts_use_stock() {
+    MemFs fs;
+    records::Store beans(fs, records::kBeanSpec);
+    TEST_ASSERT_TRUE(beans.begin());
+    records::Saved out;
+    const std::string b = R"({"version":1,"name":"Nyeri AA","origin":"Kenya","process":"washed","stockG":300})";
+    TEST_ASSERT_EQUAL(records::Error::None, save(beans, b, out));
+    const std::string id = out.id;
+    float left = 0;
+    TEST_ASSERT_EQUAL(records::Error::None, records::useStock(beans, id.c_str(), 250, left));
+    TEST_ASSERT_EQUAL_FLOAT(50, left);
+    TEST_ASSERT_EQUAL(records::Error::None, records::useStock(beans, id.c_str(), 250, left));
+    TEST_ASSERT_EQUAL_FLOAT(0, left); // not below zero
+    TEST_ASSERT_EQUAL(records::Error::NotFound, records::useStock(beans, "nope", 10, left));
+    TEST_ASSERT_EQUAL(records::Error::None,
+                      save(beans, R"({"version":1,"name":"No stock","origin":"Peru","process":"natural"})", out));
+    TEST_ASSERT_EQUAL(records::Error::None, records::useStock(beans, out.id.c_str(), 10, left));
+    TEST_ASSERT_EQUAL_FLOAT(-1, left); // no stock recorded: unchanged
+    for (size_t i = beans.list().size(); i < records::kMaxBeans; i++) {
+        char name[16];
+        snprintf(name, sizeof name, "Bean %u", (unsigned)i);
+        TEST_ASSERT_EQUAL(records::Error::None,
+                          save(beans, std::string(R"({"version":1,"name":")") + name + R"(","origin":"X","process":"Y"})", out));
+    }
+    TEST_ASSERT_EQUAL(records::Error::Full,
+                      save(beans, R"({"version":1,"name":"One more","origin":"X","process":"Y"})", out));
+    TEST_ASSERT_EQUAL(records::kMaxBeans, beans.list().size());
+}
+
 void runRecordTests() {
     RUN_TEST(test_roast_record_checks);
     RUN_TEST(test_roasts_keep_the_newest);
+    RUN_TEST(test_bean_record_checks);
+    RUN_TEST(test_beans_refuse_when_full_and_roasts_use_stock);
 }

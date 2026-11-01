@@ -134,6 +134,58 @@
     return list.slice().sort((a, b) => (a.date || 0) - (b.date || 0))[0];
   }
 
+  // ---------- beans (core/records.h has the record) ----------
+  const MAX_PURCHASES = 50;
+  const GRAMS = { g: 1, kg: 1000, lb: 453.59237 };
+  const round1 = (v) => Math.round(v * 10) / 10;
+
+  function toGrams(amount, unit) {
+    const n = Number(amount);
+    return isFinite(n) && n >= 0 && GRAMS[unit] ? round1(n * GRAMS[unit]) : null;
+  }
+
+  // "850 g", "4.25 kg"; '—' when not recorded.
+  function stockText(g) {
+    if (!isNum(g)) return '—';
+    return g >= 1000 ? Math.round(g / 10) / 100 + ' kg' : Math.round(g) + ' g';
+  }
+
+  // A bean record from form text: blanks dropped, numbers parsed, flavours
+  // split on commas, density a class or g/L. `prev` keeps stock and purchases.
+  function beanFromForm(f, prev) {
+    const b = Object.assign({}, prev || {}, { version: 1 });
+    const text = (k, v) => { v = String(v === undefined ? '' : v).trim(); if (v) b[k] = v; else delete b[k]; };
+    const num = (k, v) => { const s = String(v === undefined ? '' : v).trim(); if (s !== '' && isFinite(Number(s))) b[k] = Number(s); else delete b[k]; };
+    for (const k of ['name', 'origin', 'process', 'region', 'varietal', 'farm', 'harvest', 'notes', 'link']) text(k, f[k]);
+    for (const k of ['altitudeMin', 'altitudeMax', 'moisture', 'score']) num(k, f[k]);
+    const d = String(f.density || '').trim().toLowerCase();
+    if (['high', 'medium', 'low'].includes(d)) b.density = d;
+    else if (d && isFinite(Number(d))) b.density = Number(d);
+    else delete b.density;
+    const fl = String(f.flavours || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (fl.length) b.flavours = fl; else delete b.flavours;
+    const comps = (f.components || []).filter((c) => c && (String(c.origin || '').trim() || String(c.process || '').trim()))
+      .map((c) => { const o = {}; for (const k of ['origin', 'process']) if (String(c[k] || '').trim()) o[k] = String(c[k]).trim();
+        if (String(c.percent || '').trim() !== '' && isFinite(Number(c.percent))) o.percent = Number(c.percent); return o; });
+    if (f.blend) { b.blend = true; if (comps.length) b.components = comps; else delete b.components; } else { delete b.blend; delete b.components; }
+    if (f.favourite) b.favourite = true; else delete b.favourite;
+    return b;
+  }
+
+  // Adds a purchase ({amount, unit, price?, date?}) to the stock and the
+  // history (the newest MAX_PURCHASES kept). Returns a new record.
+  function addPurchase(bean, p) {
+    const g = toGrams(p.amount, p.unit);
+    if (!g) return bean;
+    const b = Object.assign({}, bean);
+    const entry = { g };
+    if (String(p.price || '').trim() !== '' && isFinite(Number(p.price))) entry.price = Number(p.price);
+    if (p.date) entry.date = String(p.date).slice(0, 20);
+    b.purchases = (b.purchases || []).concat([entry]).slice(-MAX_PURCHASES);
+    b.stockG = round1((isNum(b.stockG) ? b.stockG : 0) + g);
+    return b;
+  }
+
   return { VERSION, MAX_ROASTS, MAX_BYTES, MAX_POINTS, sampleStep, buildRoast, lossPct, duration, roastCsv,
-    refCurve, pruneCandidate };
+    refCurve, pruneCandidate, GRAMS, toGrams, stockText, beanFromForm, addPurchase };
 });
