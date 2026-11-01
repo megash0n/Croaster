@@ -85,7 +85,7 @@ struct Command {
     enum class Kind : uint8_t {
         SetHeater,   // a = 0..100 % (manual request)
         SetFan,      // a = 0..100 %
-        SetSetpoint, // a = C; b = 1: restart the PID bumpless from its present output
+        SetSetpoint, // a = C; b = 1: restart the PID bumpless from its present output (recipe steps and preheat)
         SetMode,     // a = (float)Mode  (Manual or Pid; others via Start*)
         SetPidInput, // a = (float)PidInput
         SetGains,    // a,b,c = kp,ki,kd

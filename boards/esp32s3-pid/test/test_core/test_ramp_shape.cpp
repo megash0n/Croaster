@@ -328,6 +328,39 @@ void test_pid_restart_keeps_output() {
     TEST_ASSERT_FLOAT_WITHIN(1.0f, 70, pid.update(151.2f, 151, 12)); // only Kp * 0.2 C added
 }
 
+// Plain setpoint steps and the charge preheat restart the PID bumpless (b = 1)
+// when the PID input is below the target; at or above it, or unreadable, b = 0.
+void test_plain_setpoint_step_bumpless() {
+    recipe::Runner run;
+    recipe::RoastClock clock;
+    started(run, R"({"steps":[
+        {"trigger":{"type":"bt","value":150},"actions":[{"type":"setpoint","value":200}]}]})");
+    recipe::Output o;
+    run.tick(at(0, 140), clock, o);
+    run.tick(at(1000, 152), clock, o);
+    const Command c = lastCommand(o, Command::Kind::SetSetpoint);
+    TEST_ASSERT_EQUAL_FLOAT(200, c.a);
+    TEST_ASSERT_EQUAL_FLOAT(1, c.b);
+    TEST_ASSERT_EQUAL_FLOAT(0, recipe::bumplessFlag(at(0, 200), 200));
+    TEST_ASSERT_EQUAL_FLOAT(0, recipe::bumplessFlag(at(0, NAN), 200));
+
+    started(run, R"({"chargeTemp":200,"steps":[
+        {"trigger":{"type":"event","value":"CHARGE"},"actions":[{"type":"power","value":60}]}]})");
+    o = recipe::Output();
+    run.tick(at(0, 30), clock, o);
+    TEST_ASSERT_EQUAL_FLOAT(1, lastCommand(o, Command::Kind::SetSetpoint).b);
+
+    // A bumpless restart keeps the heater, and a step well above the input
+    // still raises it at once (the integrator range limits how far it offsets P).
+    Pid::Config cfg;
+    Pid pid(cfg);
+    pid.setGains({5, 0.1f, 0});
+    pid.reset(200, 195, 60, 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 60, pid.update(200, 195, 0));
+    pid.reset(200, 150, 30, 0);
+    TEST_ASSERT_EQUAL_FLOAT(100, pid.update(200, 150, 0));
+}
+
 void runRampShapeTests() {
     RUN_TEST(test_shape_fraction);
     RUN_TEST(test_shape_parse);
@@ -338,4 +371,5 @@ void runRampShapeTests() {
     RUN_TEST(test_setpoint_ramp_bt_above_target);
     RUN_TEST(test_setpoint_ramp_start_fallbacks);
     RUN_TEST(test_pid_restart_keeps_output);
+    RUN_TEST(test_plain_setpoint_step_bumpless);
 }

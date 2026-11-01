@@ -186,6 +186,12 @@ float pidInputC(const Inputs& in);
 // trip ends PID within 2 s in that case anyway.
 float rampStartC(const Inputs& in, float targetC);
 
+// SetSetpoint's `b` for a plain setpoint step or the charge preheat: 1 (restart
+// the PID bumpless from the present heater output) when the PID input is below
+// the target, else 0 (BT at or above the target, or unreadable: the PID's
+// normal response, which cuts the heater).
+float bumplessFlag(const Inputs& in, float targetC);
+
 enum class State : uint8_t { Empty, Ready, Running, Done, Aborted };
 const char* stateName(State s);
 

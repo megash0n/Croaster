@@ -326,6 +326,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- **Bumpless PID restart for recipe setpoint steps and the charge preheat.**
+  When the PID input is below the target they now restart the PID from the
+  present heater output, as setpoint ramps do (D32), instead of from 0 %.
+  At or above the target, or with no reading, the PID responds as before.
+  Protocol `setpoint` commands are unchanged.
 - **Setpoint ramps start at BT (D32, T64).** A recipe setpoint ramp now
   starts at the PID input when the step applies (BT by default), not at the
   board's previous setpoint, and the PID restarts from the present heater

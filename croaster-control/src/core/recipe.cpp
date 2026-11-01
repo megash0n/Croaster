@@ -587,6 +587,11 @@ float rampStartC(const Inputs& in, float targetC) {
     return std::isfinite(sp) && sp > 0 && sp < targetC ? sp : NAN;
 }
 
+float bumplessFlag(const Inputs& in, float targetC) {
+    const float pv = pidInputC(in);
+    return std::isfinite(pv) && pv < targetC ? 1.0f : 0.0f;
+}
+
 void Runner::startRamp(const Action& a, float from, uint32_t nowMs, Output& out, float restart) {
     rampActive_ = true;
     rampPower_ = a.type == ActionType::Power;
@@ -636,7 +641,7 @@ void Runner::apply(const Step& s, const Inputs& in, Output& out) {
                 // setpoint, so the heater carries on from its present output.
                 startRamp(a, rampStartC(in, a.value), in.nowMs, out, 1);
             else
-                out.add(Command::Kind::SetSetpoint, a.value);
+                out.add(Command::Kind::SetSetpoint, a.value, bumplessFlag(in, a.value));
             break;
         case ActionType::Hold:
             rampActive_ = false;
@@ -684,7 +689,7 @@ void Runner::tick(const Inputs& in, const RoastClock& clock, Output& out) {
         pendingCharge_ = false;
         if (!clock.charged()) {
             out.add(Command::Kind::SetMode, static_cast<float>(Mode::Pid));
-            out.add(Command::Kind::SetSetpoint, recipe_.chargeC);
+            out.add(Command::Kind::SetSetpoint, recipe_.chargeC, bumplessFlag(in, recipe_.chargeC));
         }
     }
     Cond cond[kMaxSteps];
