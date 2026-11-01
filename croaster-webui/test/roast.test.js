@@ -152,6 +152,15 @@ test('sessionState: idle until started, then preheat, roasting, cooling, ended',
   assert.equal(R.sessionState(s), 'ended');
 });
 
+test('stopAvailable: recording, heater on, not Manual, or a recipe running', () => {
+  assert.equal(R.stopAvailable(true, null, null), true);
+  assert.equal(R.stopAvailable(false, { Mode: 'Manual', BurnerVal: 40 }, null), true); // manual roast
+  assert.equal(R.stopAvailable(false, { Mode: 'PID', BurnerVal: 0 }, null), true);
+  assert.equal(R.stopAvailable(false, { Mode: 'Manual', BurnerVal: 0 }, { state: 'running' }), true);
+  assert.equal(R.stopAvailable(false, { Mode: 'Manual', BurnerVal: 0 }, { state: 'done' }), false);
+  assert.equal(R.stopAvailable(false, null, null), false);
+});
+
 test('stopConfirmed: Manual with the heater at 0 %', () => {
   assert.equal(R.stopConfirmed({ Mode: 'Manual', BurnerVal: 0, FanVal: 65 }), true);
   assert.equal(R.stopConfirmed({ Mode: 'PID', BurnerVal: 0 }), false);

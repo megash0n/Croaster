@@ -62,15 +62,15 @@ test('risky commands sit behind a confirm step', () => {
   assert.match(html, /data-cmd='\{"command":"stop"\}' data-confirm="[^"]+">Stop autotune</);
 });
 
-test('STOP starts disabled and acts only through a confirm while a roast records', () => {
+test('STOP starts disabled and acts only through a confirm', () => {
   const app = read('app.js');
   assert.match(html, /<button [^>]*id="stop"[^>]* disabled[ >]/);
   assert.match(app, /\$\('#stop'\)\.addEventListener\('click', stopRoast\)/);
   const body = app.slice(app.indexOf('function stopRoast()'), app.indexOf('function renderEvents('));
-  assert.match(body, /if \(!recording\(\)\) return;/);
+  assert.match(body, /if \(!R\.stopAvailable\(recording\(\), S\.data, S\.recipe\)\) return;/);
   assert.ok(body.indexOf('confirmThen(') >= 0 && body.indexOf('confirmThen(') < body.indexOf("send({ command: 'stop' })"),
     'stop is sent from inside the confirm callback');
-  assert.match(app, /stop\.disabled = !recording\(\);/);
+  assert.match(app, /stop\.disabled = !R\.stopAvailable\(recording\(\), S\.data, S\.recipe\);/);
 });
 
 test('samples are recorded only after an explicit start', () => {

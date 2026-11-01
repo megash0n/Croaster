@@ -341,18 +341,19 @@
   }
 
   function stopRoast() {
-    if (!recording()) return;
+    if (!R.stopAvailable(recording(), S.data, S.recipe)) return;
     const c = S.control && S.control.cooldownFan;
     const fan = c && isNum(c.stop) ? ' (' + c.stop + ' %)' : '';
-    confirmThen('Stop the roast? The heater turns off, the board switches to Manual (ending PID, profile or autotune), ' +
-      'the fan runs at the cooldown speed' + fan + ' until ET falls below the cooldown end, and recording ends.', () => {
+    confirmThen('Stop the roast? The heater turns off, any running recipe is aborted, the board switches to Manual ' +
+      '(ending PID, profile or autotune), the fan runs at the cooldown speed' + fan + ' until ET falls below the ' +
+      'cooldown end' + (recording() ? ', and recording ends.' : '.'), () => {
       if (S.link !== 'open') {
         logReply('err', 'STOP not sent: not connected. The board keeps its current heater and mode.');
         return;
       }
       send({ command: 'stop' });
       expectStop();
-      endRoast();
+      if (recording()) endRoast();
     });
   }
 
@@ -412,8 +413,9 @@
     $('#t-sv').textContent = fmt(d.SV);
     $('#t-mode').textContent = (d.Mode || '—') + (d.cooling ? ' · cooling' : '');
     const stop = $('#stop');
-    stop.disabled = !recording();
-    stop.title = recording() ? 'End the roast: heater off, Manual, cooldown fan' : 'Available while a roast is recording';
+    stop.disabled = !R.stopAvailable(recording(), S.data, S.recipe);
+    stop.title = stop.disabled ? 'Available while a roast records or the board is heating or running a recipe'
+      : 'Emergency stop: heater off, recipe aborted, Manual, cooldown fan';
     const start = $('#new-roast');
     start.disabled = recording();
     start.title = recording() ? 'A roast is recording: STOP or End roast ends it' : 'Start recording a roast';

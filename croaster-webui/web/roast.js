@@ -146,6 +146,14 @@
     return !EVENTS.slice(order + 1).some((e) => e.code !== 'DROP' && has(e.code));
   }
 
+  // STOP is offered while a roast records or while the board is driving the
+  // roaster on its own: heater on, a mode other than Manual, or a recipe running.
+  function stopAvailable(recording, data, recipe) {
+    if (recording) return true;
+    if (recipe && recipe.state === 'running') return true;
+    return !!data && (data.BurnerVal > 0 || (!!data.Mode && data.Mode !== 'Manual'));
+  }
+
   // The board has acted on "stop": Manual mode with the heater at 0 %.
   function stopConfirmed(data) {
     return !!data && data.Mode === 'Manual' && data.BurnerVal === 0;
@@ -228,6 +236,6 @@
   }
 
   return { EVENTS, lsSlope, smoothedRor, detectTurningPoint, formatClock, phase, niceTicks, convertTemp,
-    convertSession, buildCsv, isRecording, endSession, resumeSession, sessionState, stopConfirmed, eventAllowed,
+    convertSession, buildCsv, isRecording, endSession, resumeSession, sessionState, stopAvailable, stopConfirmed, eventAllowed,
     dummyState };
 });

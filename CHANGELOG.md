@@ -326,6 +326,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- **STOP works as an emergency off whenever the board is active.** The page
+  enables STOP while a roast records, the heater is on, the mode is not
+  Manual or a recipe is running. After the confirm it sends `stop`: heater
+  0 %, any recipe aborted, Manual, cooldown fan. Recording ends only if one
+  was running.
 - **Bumpless PID restart for recipe setpoint steps and the charge preheat.**
   When the PID input is below the target they now restart the PID from the
   present heater output, as setpoint ramps do (D32), instead of from 0 %.

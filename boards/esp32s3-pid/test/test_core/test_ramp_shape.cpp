@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "core/control_protocol.h"
 #include "core/pid.h"
 #include "core/recipe.h"
 
@@ -361,6 +362,34 @@ void test_plain_setpoint_step_bumpless() {
     TEST_ASSERT_EQUAL_FLOAT(100, pid.update(200, 150, 0));
 }
 
+// A confirmed STOP (protocol "stop") aborts a running recipe mid-ramp: no
+// command follows, so the controller's heater 0 / Manual / cooldown holds.
+void test_stop_aborts_running_recipe() {
+    Command c;
+    TEST_ASSERT_TRUE(controlproto::basicCommand("stop", c));
+    TEST_ASSERT_TRUE(c.kind == Command::Kind::Stop);
+    recipe::Runner run;
+    recipe::RoastClock clock;
+    started(run, R"({"steps":[
+        {"trigger":{"type":"bt","value":100},"actions":[{"type":"power","value":70}]},
+        {"trigger":{"type":"bt","value":150},"actions":[{"type":"setpoint","value":200,"ramp":120}]},
+        {"trigger":{"type":"bt","value":160},"actions":[{"type":"power","value":90}]}]})");
+    recipe::Output o;
+    run.tick(at(0, 90), clock, o);
+    run.tick(at(1000, 120), clock, o);
+    run.tick(at(2000, 152), clock, o);
+    TEST_ASSERT_TRUE(run.ramping());
+    run.abort("stop");
+    TEST_ASSERT_TRUE(run.state() == recipe::State::Aborted);
+    TEST_ASSERT_FALSE(run.ramping());
+    for (uint32_t t = 3000; t <= 10000; t += 1000) {
+        o = recipe::Output();
+        run.tick(at(t, 170), clock, o);
+        TEST_ASSERT_EQUAL(0, o.count);
+        TEST_ASSERT_FALSE(o.stop);
+    }
+}
+
 void runRampShapeTests() {
     RUN_TEST(test_shape_fraction);
     RUN_TEST(test_shape_parse);
@@ -372,4 +401,5 @@ void runRampShapeTests() {
     RUN_TEST(test_setpoint_ramp_start_fallbacks);
     RUN_TEST(test_pid_restart_keeps_output);
     RUN_TEST(test_plain_setpoint_step_bumpless);
+    RUN_TEST(test_stop_aborts_running_recipe);
 }
