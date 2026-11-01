@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Reference roast.** The Ref button on the graph picks a saved roast and
+  draws its BT curve dashed, with its event markers along the bottom,
+  aligned at charge (at the recording start before charge). The view widens
+  to the end of the reference. Choose None to remove it; it is kept for the
+  page visit only.
 - **Saved roasts.** After STOP, and again when the cooldown ends, the page
   offers to save the roast on the board with a name, green and roasted
   weights (weight loss shown) and notes. A record (version 1) holds the

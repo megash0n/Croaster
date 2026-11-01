@@ -83,6 +83,7 @@
     behind: { state: null, warn: false, lagC: NaN },
     rec: { state: 'unknown', list: [], askedAt: 0, used: null, total: null, max: null, getIntent: {} }, // saved roasts
     cooling: null, // the board's "cooling" flag in the last data
+    ref: null, refCache: null, // reference roast record shown on the chart; its curve in the page unit
   };
   let worker = null;
 
@@ -602,7 +603,9 @@
     if (charge !== null) xMin = Math.max(xMin, -180); // keep at most 3 min of preheat in view
     const xLast = ss.length ? ss[ss.length - 1].t - t0 : 0;
     const plan = setpointPlan();
-    const xMax = Math.max(xLast, xMin + (charge !== null ? 720 : 300), plan.length ? plan[plan.length - 1].t - t0 : 0);
+    const ref = refCurve();
+    const refEnd = ref ? Math.max(ref.points.length ? ref.points[ref.points.length - 1].t : 0, ...ref.events.map((e) => e.t)) : 0;
+    const xMax = Math.max(xLast, xMin + (charge !== null ? 720 : 300), plan.length ? plan[plan.length - 1].t - t0 : 0, refEnd);
     const xTicks = R.niceTicks(xMin / 60, xMax / 60, Math.max(3, Math.floor(W / 90)));
     const x = (t) => M.l + ((t - t0) - xMin) / (xMax - xMin) * (W - M.l - M.r);
 
@@ -614,6 +617,7 @@
       for (const v of [s.bt, s.et, s.sv, s.at]) if (isNum(v)) { tLo = Math.min(tLo, v); tHi = Math.max(tHi, v); }
     }
     for (const p of plan) { tLo = Math.min(tLo, p.v); tHi = Math.max(tHi, p.v); }
+    if (ref) for (const p of ref.points) if (p.t >= xMin) { tLo = Math.min(tLo, p.v); tHi = Math.max(tHi, p.v); }
     const first = ss.length - vis.length;
     for (let i = first; i < ss.length; i++) {
       const r = rorAt(i);
@@ -659,6 +663,21 @@
       }
       if (d) svg.append(svgEl('path', { class: cls, d }));
     };
+    // Reference roast: its charge sits on this roast's charge (or its start).
+    if (ref) {
+      const rp = ref.points.filter((p) => p.t >= xMin);
+      if (rp.length) svg.append(svgEl('path', { class: 'ref-bt', d: rp.map((p, n) => (n ? 'L' : 'M') + x(t0 + p.t).toFixed(1) + ' ' + yt(p.v).toFixed(1)).join('') }));
+      for (const e of ref.events) {
+        const px = x(t0 + e.t);
+        if (px < M.l || e.code === 'CHARGE') continue;
+        const g = svgEl('g', { class: 'ref-event' });
+        g.append(svgEl('line', { x1: px, x2: px, y1: M.t, y2: H - M.b }));
+        const tx = svgEl('text', { x: px + 3, y: H - M.b - 4 });
+        tx.textContent = EVENT_SHORT[e.code] || e.code;
+        g.append(tx);
+        svg.append(g);
+      }
+    }
     line('sv', (i) => ss[i].sv, yt);
     if (plan.length) svg.append(svgEl('path', { class: 'sv-plan', d: plan.map((p, n) => (n ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + yt(p.v).toFixed(1)).join('') }));
     line('at-target', (i) => ss[i].at, yt);
@@ -1025,7 +1044,7 @@
       if (intent === 'json') downloadJson(r.roast.name, r.roast);
       else if (intent === 'csv') downloadText(base + '.csv', RC.roastCsv(r.roast), 'text/csv');
       else if (intent === 'edit') openRoastEdit(r.id, r.roast);
-      else if (intent === 'ref' && typeof setReference === 'function') setReference(r.roast);
+      else if (intent === 'ref') setReference(Object.assign({ id: r.id }, r.roast));
     } else if (cmd === 'roastSave') {
       if (!r.ok) {
         fail('Not saved');
@@ -1089,6 +1108,54 @@
       tr.append(td);
       body.append(tr);
     }
+  }
+
+  // ---------- reference roast ----------
+  // A saved roast drawn under the live one. Kept for this page visit only.
+  function refCurve() {
+    if (!S.ref) return null;
+    const u = unit() || S.ref.unit;
+    if (!S.refCache || S.refCache.unit !== u) S.refCache = { unit: u, curve: RC.refCurve(S.ref, u) };
+    return S.refCache.curve;
+  }
+
+  function setReference(roast) {
+    S.ref = roast;
+    S.refCache = null;
+    renderRefKey();
+    S.dirty = true;
+  }
+
+  function renderRefKey() {
+    const k = $('#key-ref');
+    k.hidden = !S.ref;
+    k.textContent = S.ref ? 'Ref: ' + S.ref.name : '';
+    $('#ref-btn').classList.toggle('on', !!S.ref);
+  }
+
+  function openRefPicker() {
+    const dlg = $('#ref-dialog');
+    const pick = $('#ref-pick');
+    pick.textContent = '';
+    pick.append(el('option', { value: '' }, 'None'));
+    for (const m of S.rec.list) {
+      if (!m.valid) continue;
+      const date = m.date ? new Date(m.date * 1000).toLocaleDateString() + ' · ' : '';
+      pick.append(el('option', { value: m.id }, date + m.name + (m.beanName ? ' · ' + m.beanName : '')));
+    }
+    pick.value = S.ref && S.rec.list.some((m) => m.id === S.ref.id) ? S.ref.id : '';
+    $('#ref-info').textContent = S.rec.state !== 'ready' ? 'Roast storage unavailable.'
+      : S.rec.list.length ? '' : 'No saved roasts yet.';
+    dlg.returnValue = '';
+    dlg.onclose = () => {
+      if (dlg.returnValue !== 'ok') return;
+      const id = pick.value;
+      if (!id) { setReference(null); return; }
+      S.rec.getIntent[id] = 'ref';
+      send({ command: 'roastGet', id }, true);
+    };
+    if (S.rec.state !== 'ready') requestRoasts();
+    dlg.showModal();
   }
 
   // ---------- device library ----------
@@ -2001,6 +2068,7 @@
     $('#csv').addEventListener('click', downloadCsv);
     $('#clear-roast').addEventListener('click', clearRoast);
     $('#save-roast').addEventListener('click', openRoastSave);
+    $('#ref-btn').addEventListener('click', openRefPicker);
     $('#rec-refresh').addEventListener('click', requestRoasts);
     for (const id of ['#rs-green', '#rs-roasted']) $(id).addEventListener('input', showLoss);
 

@@ -124,6 +124,7 @@ test('the page sends commands only from user actions', () => {
     "send({ command: 'roastSave', roast: rec }, true);",
     "const fetch = (intent) => () => { rec.getIntent[m.id] = intent; send({ command: 'roastGet', id: m.id }, true); };",
     "send({ command: 'roastDelete', id: m.id });",
+    "send({ command: 'roastGet', id }, true);",
     "send({ command: 'libraryList' });",
     "send(Object.assign({ command: 'librarySave', profile }, extra));",
     "if (r.recipe) send({ command: 'getRecipe' });",
@@ -217,4 +218,14 @@ test('Fake readings button turns green from the data flag', () => {
   assert.match(app, /\$\('#dummy-toggle'\)/);
   assert.match(app, /classList\.toggle\('on', fake\)/);
   assert.match(read('app.css'), /\.row-buttons button\.on \{[^}]*background: var\(--ok\)/);
+});
+
+test('Ref overlays a saved roast: read with roastGet, drawn dashed from its charge', () => {
+  const app = read('app.js');
+  const css = read('app.css');
+  assert.match(html, /id="ref-btn" data-needs="controls" hidden/);
+  assert.match(app, /intent === 'ref'\) setReference\(/);
+  assert.match(app, /class: 'ref-bt'/);
+  assert.match(app, /x\(t0 \+ p\.t\)/); // reference t counts from its charge
+  assert.match(css, /\.chart \.ref-bt \{[^}]*stroke-dasharray/);
 });

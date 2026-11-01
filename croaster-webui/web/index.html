@@ -81,7 +81,9 @@
             <span class="key bt">BT</span><span class="key et">ET</span><span class="key ror">RoR</span>
             <span class="key ror-et" id="key-ror-et">ET RoR</span><span class="key sv" data-field="SV">SV</span><span class="key at" data-field="atTarget">Test point</span>
             <span class="key heat" data-field="BurnerVal">Heater</span><span class="key fan" data-field="FanVal">Fan</span>
+            <span class="key ref" id="key-ref" hidden></span>
           </div>
+          <button type="button" class="ghost" id="ref-btn" data-needs="controls" hidden title="Overlay a saved roast">Ref</button>
           <label class="toggle" title="Least-squares slope of BT over the last 30 s, times 60">
             <input type="checkbox" id="ror-smooth"> Smoothed RoR (30 s)
           </label>
@@ -394,6 +396,19 @@
     <div class="row-buttons">
       <button value="cancel" class="ghost">Not now</button>
       <button value="ok">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="ref-dialog" aria-labelledby="ref-title">
+  <form method="dialog" class="roast-form">
+    <h2 id="ref-title">Reference roast</h2>
+    <p class="small">Its BT curve and events are drawn dashed, aligned at charge.</p>
+    <label>Roast <select id="ref-pick"></select></label>
+    <p class="small muted" id="ref-info"></p>
+    <div class="row-buttons">
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="ok">Show</button>
     </div>
   </form>
 </dialog>
