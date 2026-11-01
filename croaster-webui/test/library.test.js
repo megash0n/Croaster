@@ -138,3 +138,16 @@ test('busyReason and helpers', () => {
   assert.equal(L.parseFile('{').error, 'badFile');
   assert.equal(L.message('busy', 'heater on'), 'refused while the board reports heater on');
 });
+
+test('behindSchedule ignores the charge preheat', () => {
+  // The board reports follow false while it preheats to chargeTemp, so a
+  // saturated heater during preheat neither warns nor starts the hold timer.
+  let st = null;
+  for (let ms = 0; ms <= 60000; ms += 1000) {
+    const r = L.behindSchedule(st, { nowMs: ms, btC: 120, setpointC: 200, heater: 100, follow: false }, { lagC: 8, holdMs: 20000 });
+    st = r.state;
+    assert.equal(r.warn, false);
+  }
+  const r = L.behindSchedule(st, { nowMs: 61000, btC: 120, setpointC: 200, heater: 100, follow: true }, { lagC: 8, holdMs: 20000 });
+  assert.equal(r.warn, false); // first setpoint step: the hold starts now
+});
