@@ -365,8 +365,9 @@ the ramp time; the shape only changes how the climb is spread.
 - **Custom**: your own curve. Edit opens a touch editor with 21 points, one
   every 5 % of the ramp time, each 0 to 100 in steps of 5. Drag the points,
   start from a preset, and watch the path preview below. The text gives
-  where the climb is steepest and how many times steeper than linear it is.
-  Use curve saves it.
+  where the climb is steepest (every place, if it ties) and how many times
+  steeper than linear it is. Only the shape counts, so on release the points
+  scale until the tallest is at 100. Use curve saves it.
 
 The spark next to the Shape menu previews the path.
 

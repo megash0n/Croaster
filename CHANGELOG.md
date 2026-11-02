@@ -219,6 +219,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Switching to PID while idle no longer forces the fan to 30 % or enables
   STOP: the fan floor applies only when the heater actually delivers a
   pulse, and PID at setpoint 0 keeps the heater off.
+- PID showed a 32 F setpoint when off, which enabled STOP. Setpoint off now
+  reads 0 (shown as off) in every unit, and PID from idle starts with no
+  setpoint.
+- Custom curve editor: small points (e.g. 0,0,0,0,5) scale so the tallest is
+  100, and the steepest-point text names every place that ties.
 - Run recipe on Live starts the roast recording, as on the Recipe tab.
 - **Dummy readings in Celsius while the unit is °F or K (T61).** Local
   change to upstream code (`croaster/src/CroasterCore.cpp`

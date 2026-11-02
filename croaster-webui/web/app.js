@@ -1852,7 +1852,7 @@
   // stays as it is until a point is moved.
   function openCurveEditor(a, power, done) {
     const dlg = $('#curve-dialog');
-    let rates = RS.normalize(RS.rates('custom', a.curve)); // drawn with its tallest rate at 100; same path
+    let rates = RS.normalize(RS.rates('custom', a.curve)); // tallest rate shown at 100; only proportions count
     let knots = RS.knotsOf(rates).map(RS.snap);
     let touched = false;
     const setKnots = (k) => { knots = k; rates = RS.fromKnots(k); touched = true; };
@@ -1892,9 +1892,10 @@
       prev.append(lo, hi);
       const pk = RS.peak(rates);
       const where = (u) => (u === 0 ? 'the start' : u === 1 ? 'the end' : Math.round(u * 100) + ' %');
-      const spots = pk.spots.map((s) => (s.from === s.to ? where(s.from) : 'from ' + where(s.from) + ' to ' + where(s.to)));
-      const list = spots.length > 1 ? spots.slice(0, -1).join(', ') + ' and ' + spots[spots.length - 1] : spots[0] || where(pk.at);
-      $('#curve-text').textContent = 'Steepest at ' + list + ' of the ramp, ' + pk.factor.toFixed(1) + '\u00d7 a linear ramp.';
+      const spots = pk.spots.map((s) => (s.from === s.to ? 'at ' + where(s.from) : 'from ' + where(s.from) + ' to ' + where(s.to)));
+      const list = spots.length > 1 ? spots.slice(0, -1).join(', ') + ' and ' + spots[spots.length - 1] : spots[0] || 'at ' + where(pk.at);
+      $('#curve-text').textContent = pk.factor < 1.05 ? 'Even rate across the ramp (linear).' :
+        'Steepest ' + list + ' of the ramp, ' + pk.factor.toFixed(1) + '\u00d7 a linear ramp.';
     };
     const setAt = (ev) => {
       const r = svg.getBoundingClientRect();
