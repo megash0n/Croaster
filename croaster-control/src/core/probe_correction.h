@@ -52,6 +52,7 @@ inline void publishProbes(const ThermoSample& raw, Snapshot& out) {
     out.etRaw = raw.etRaw;
     out.btRaw = raw.btRaw;
     out.ambient = raw.ambient;
+    out.box = raw.box;
     out.etFault = raw.etFault;
     out.btFault = raw.btFault;
 }

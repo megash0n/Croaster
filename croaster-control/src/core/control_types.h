@@ -112,12 +112,14 @@ struct ThermoSample {
     float etRaw, btRaw; // this sample, NaN when faulted
     float ambient;      // MAX31855 cold-junction temp, BT chip first (NaN on MAX6675)
     uint8_t etFault, btFault;
+    float box = NAN;    // box temperature: average cold-junction temp (max31855::boxTemperatureC)
 };
 
 // Probe temperatures here are uncorrected: CroasterCore adds the user's
 // correction when it reads them through RoasterProbe.
 struct Snapshot {
     float et = NAN, bt = NAN, ambient = NAN; // filtered; NaN on fault / before the first sample
+    float box = NAN;                         // box temperature from the chips (ThermoSample::box)
     float etRaw = NAN, btRaw = NAN;          // this sample, NaN on fault
     uint8_t etFault = 0, btFault = 0;        // converter fault bits (see max31855.h / max6675.h)
     float heaterPct = 0;                     // requested 0..100 (PID output or manual)

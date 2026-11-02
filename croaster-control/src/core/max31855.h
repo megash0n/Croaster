@@ -3,6 +3,7 @@
 // Replaces Adafruit_MAX31855 + Adafruit_BusIO: the transport is 4 SPI bytes,
 // all the logic is here and is host-testable.
 #include <cmath>
+#include <initializer_list>
 #include <cstdint>
 
 struct ThermoReading {
@@ -47,5 +48,20 @@ inline float boardTemperatureC(const ThermoReading& preferred, const ThermoReadi
     if (!(other.fault & kFaultNoDevice) && std::isfinite(other.internalC))
         return other.internalC;
     return NAN;
+}
+// Box (enclosure) temperature: the average cold-junction temperature of the
+// chips that report one. Skips a missing chip, a MAX6675 (NaN) and a value
+// outside the MAX31855's -40..125 C range. NaN when none is usable.
+inline float boxTemperatureC(const ThermoReading& a, const ThermoReading& b) {
+    float sum = 0;
+    int n = 0;
+    for (const ThermoReading* r : {&a, &b}) {
+        if (!(r->fault & kFaultNoDevice) && std::isfinite(r->internalC) && r->internalC >= -40 &&
+            r->internalC <= 125) {
+            sum += r->internalC;
+            n++;
+        }
+    }
+    return n ? sum / n : NAN;
 }
 } // namespace max31855
