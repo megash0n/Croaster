@@ -74,6 +74,12 @@
         <div class="tile fan" data-field="FanVal"><span class="tile-label">Fan</span><span class="tile-value num" id="t-fan">—</span><span class="tile-unit">%</span><span class="tile-sub small" id="t-fan-assist" title="Fan assist: extra airflow while BT runs above the setpoint with the heater off" hidden></span></div>
         <div class="tile sv" data-field="SV"><span class="tile-label">Setpoint</span><span class="tile-value num" id="t-sv">—</span><span class="tile-unit" data-unit></span></div>
         <div class="tile mode" data-field="Mode"><span class="tile-label">Mode</span><span class="tile-value" id="t-mode">—</span><span class="tile-unit" id="t-trip"></span></div>
+        <div class="tile box" id="tile-box" hidden><span class="tile-label">Box <small id="box-src"></small></span><span class="tile-value num" id="t-box">—</span><span class="tile-unit" id="t-chip"></span></div>
+      </div>
+      <div class="row-buttons aux-row" id="aux-row" hidden>
+        <button type="button" id="scroll-fan" aria-pressed="false" hidden>Scroll fan</button>
+        <label id="aux-fan1" hidden>Case fan <select data-aux="fan1"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select> <small class="muted"></small></label>
+        <label id="aux-fan2" hidden>ESP fan <select data-aux="fan2"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select> <small class="muted"></small></label>
       </div>
 
       <div class="chart-card">
@@ -199,6 +205,13 @@
             <span>Comms watchdog</span>
             <label><input type="checkbox" name="enabled"> enabled</label>
             <label>timeout s <input type="number" name="timeout" min="2" max="600" step="1" required></label>
+            <button type="submit">Save</button>
+          </form>
+          <form class="field wide" data-send="auxFans" hidden>
+            <span>Electronics fans</span>
+            <label title="Case fan (FAN1): on at the box temperature, off 3 C below">case fan on at <input type="number" name="fan1On" step="any"> <span data-unit></span></label>
+            <label title="ESP fan (FAN2): on at the ESP32-S3 chip temperature, off 3 C below">ESP fan on at <input type="number" name="fan2On" step="any"> <span data-unit></span></label>
+            <label title="The Box tile turns amber at this temperature">box warning <input type="number" name="boxWarn" step="any" required> <span data-unit></span></label>
             <button type="submit">Save</button>
           </form>
         </div>

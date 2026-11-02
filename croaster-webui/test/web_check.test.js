@@ -117,6 +117,7 @@ test('the page sends commands only from user actions', () => {
   const calls = app.split('\n').filter((l) => /\bsend\(/.test(l) && !/function send\(/.test(l)).map((l) => l.trim());
   assert.deepEqual(calls, [
     "send({ command: 'stop' });",
+    'send({ command: { auxFans: values } });',
     'send({ command: { [key]: value } }); // one command per click',
     'send({ command: { profile: steps } });',
     "send({ command: 'roastList' }, true);",

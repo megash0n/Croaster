@@ -446,6 +446,7 @@
     dummy.title = fake ? 'Fake readings are on: charts and Artisan show fake values' : '';
     $('#t-trip').textContent = d.trip ? 'TRIP ' + d.trip : (d.Target ? 'input ' + d.Target : '');
     $('.tile.mode').classList.toggle('tripped', !!d.trip);
+    renderAux(d.aux);
     for (const e of $$('[data-field]')) {
       if (e.classList.contains('stepper')) continue;
       e.hidden = S.data ? d[e.dataset.field] === undefined : !S.info.controls;
@@ -770,6 +771,48 @@
   }
 
   // ---------- controls ----------
+  // Box temperature and the optional fans: the board's "aux" data (AuxFansPlugin).
+  // Boards without it (the monitor) send none, and all of it stays hidden.
+  function renderAux(a) {
+    const tile = $('#tile-box');
+    const form = $('form[data-send="auxFans"]');
+    tile.hidden = form.hidden = !a;
+    $('#aux-row').hidden = !a || !(a.fan1 || a.fan2 || typeof a.scroll === 'boolean');
+    if (!a) return;
+    const u = unitLabel();
+    const hot = isNum(a.box) && isNum(a.warn) && a.box >= a.warn;
+    $('#t-box').textContent = fmt(a.box);
+    $('#box-src').textContent = a.boxSrc === 'sensor' ? 'sensors' : (a.boxSrc === 'chip' ? 'ESP chip' : '');
+    $('#t-chip').textContent = isNum(a.chip) ? 'ESP ' + a.chip.toFixed(1) + ' ' + u : u;
+    tile.classList.toggle('hot', hot);
+    tile.title = hot ? 'Box at or above the warning (' + a.warn + ' ' + u + '): check the case fan and airflow'
+      : 'Thermocouple boards\' cold-junction temperature, else the ESP32-S3 chip temperature';
+    const d = S.data || {};
+    const idle = d.Mode === 'Manual' && !(d.BurnerVal > 0) && !d.cooling;
+    const sf = $('#scroll-fan');
+    sf.hidden = typeof a.scroll !== 'boolean';
+    sf.classList.toggle('on', !!a.scroll);
+    sf.setAttribute('aria-pressed', String(!!a.scroll));
+    sf.textContent = 'Scroll fan ' + (a.scroll ? 'on' : 'off');
+    sf.disabled = S.link !== 'open' || !idle;
+    sf.title = d.cooling ? 'Runs until the cooldown ends' : (idle ? 'Turn the scroll fan on or off' : 'Manual mode with the heater off only');
+    for (const [k, box] of [['fan1', $('#aux-fan1')], ['fan2', $('#aux-fan2')]]) {
+      const f = a[k];
+      box.hidden = !f;
+      if (!f) continue;
+      const sel = $('select', box);
+      if (document.activeElement !== sel) sel.value = f.mode;
+      $('small', box).textContent = (f.on ? 'running' : 'off') + ' · auto at ' + f.at + ' ' + u;
+    }
+    form.elements.fan1On.closest('label').hidden = !a.fan1;
+    form.elements.fan2On.closest('label').hidden = !a.fan2;
+    fill('auxFans', { fan1On: a.fan1 && a.fan1.at, fan2On: a.fan2 && a.fan2.at, boxWarn: a.warn });
+  }
+
+  function auxSend(values) {
+    send({ command: { auxFans: values } });
+  }
+
   function renderControls() {
     const d = S.data || {};
     for (const st of $$('.stepper')) {
@@ -829,6 +872,11 @@
       case 'cooldownFan': return { cooldownFan: { stop: n('stop'), trip: n('trip'), end: n('end') } };
       case 'watchdog': return { watchdog: { enabled: f.enabled.checked, timeout: Math.round(n('timeout')) } };
       case 'fanAssist': return { fanAssist: f.enabled.checked };
+      case 'auxFans': {
+        const o = { boxWarn: n('boxWarn') };
+        for (const k of ['fan1On', 'fan2On']) if (!f[k].closest('label').hidden && f[k].value !== '') o[k] = n(k);
+        return { auxFans: o };
+      }
       case 'tempUnit': return { tempUnit: f.value.value };
       case 'interval': return { interval: Math.round(n('value')) };
       case 'correctionBt': return { correctionBt: n('value') };
@@ -2326,6 +2374,8 @@
         if (cmd.command === 'stop') expectStop();
       }));
     }
+    $('#scroll-fan').addEventListener('click', () => auxSend({ scroll: !((S.data || {}).aux || {}).scroll }));
+    for (const sel of $$('#aux-row select')) sel.addEventListener('change', () => auxSend({ [sel.dataset.aux]: sel.value }));
     for (const st of $$('.stepper')) {
       for (const b of $$('button[data-step]', st)) b.addEventListener('click', () => stepperClick(st, Number(b.dataset.step)));
     }

@@ -386,3 +386,8 @@ dialog.sheet {
 .at-table td { padding: 3px 4px; font-family: var(--mono); }
 .at-log { margin: 4px 0; padding-left: 0; list-style: none; max-height: 14em; overflow-y: auto; font-family: var(--mono); font-size: 0.8rem; }
 .err-text { color: var(--stop); }
+
+/* Box temperature tile and the optional fans row (renderAux) */
+.tile.box.hot .tile-value { color: var(--warn); }
+.aux-row { align-items: center; margin-top: var(--gap); }
+.aux-row label { display: inline-flex; align-items: center; gap: 6px; }
