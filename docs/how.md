@@ -175,7 +175,8 @@ Croaster's WebSocket on port 81, exactly like Artisan:
    profile of the same name.
 7. Controls > Recipe edits recipe steps (default: heater % and fan % at a
    time since Charge). Load to device sends `recipeLoad`, Run recipe sends
-   `recipeStart`. On Live, the recipe panel shows the next step, the fired
+   `recipeStart` and, once the board accepts it, starts a recording if none
+   is running. On Live, the recipe panel shows the next step, the fired
    list, guided prompts and the behind-schedule warning. The page fetches
    `getRecipe` only when the data's `recipe.seq` changes.
 

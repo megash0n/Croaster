@@ -116,6 +116,7 @@ test('the page sends commands only from user actions', () => {
   const app = read('app.js');
   const calls = app.split('\n').filter((l) => /\bsend\(/.test(l) && !/function send\(/.test(l)).map((l) => l.trim());
   assert.deepEqual(calls, [
+    "send({ command: 'recipeStart' });",
     "send({ command: 'stop' });",
     'send({ command: { auxFans: values } });',
     'send({ command: { [key]: value } }); // one command per click',
@@ -146,7 +147,6 @@ test('the page sends commands only from user actions', () => {
     'send({ command: { autotune: choice } });',
     'send(cmd);',
     'send({ command: payload });',
-    "const runRecipe = () => send({ command: 'recipeStart' });",
     "$('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and fan stay as they are.', () => send({ command: 'recipeAbort' })));",
     "$('#rl-skip').addEventListener('click', () => send({ command: 'recipeSkip' }));",
     "$('#rl-apply').addEventListener('click', () => { if (S.recipe) send({ command: 'recipeConfirm', step: S.recipe.prompt }); });",

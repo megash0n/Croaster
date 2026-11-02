@@ -262,7 +262,9 @@ press Save. It is on by default, and the setting survives a reboot.
 
 A recipe is a list of steps the board applies at points in the roast. Build
 it in Controls > Recipe, press Load to device, then Run recipe (on Controls
-or on Live). Up to 32 steps, each with up to 4 actions.
+or on Live). Run recipe also starts a roast recording when none is running,
+as Start does, and the saved roast keeps the recipe's name. Up to 32 steps,
+each with up to 4 actions.
 
 ### Triggers
 

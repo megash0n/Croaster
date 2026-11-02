@@ -325,18 +325,19 @@
   // Start: begins a recording in this page only (samples from now, so the preheat
   // shows; the roast clock starts at Charge). Nothing is sent to the board. Asks
   // first when it would clear an earlier roast.
+  function beginRecording() {
+    S.session = newSession();
+    S.session.active = true;
+    saveSession(true);
+    render();
+  }
+
   function startRoast() {
-    const go = () => {
-      S.session = newSession();
-      S.session.active = true;
-      saveSession(true);
-      render();
-    };
     if (recording()) return;
     if (S.session.samples.length || S.session.events.length) {
-      confirmThen('Start a new roast? The previous samples and events are cleared (download the CSV first to keep them).', go);
+      confirmThen('Start a new roast? The previous samples and events are cleared (download the CSV first to keep them).', beginRecording);
     } else {
-      go();
+      beginRecording();
     }
   }
 
@@ -354,6 +355,21 @@
   function endRoast() {
     if (R.endSession(S.session, Date.now())) saveSession(true);
     render();
+  }
+
+  // Run recipe (Live and Recipe tabs): starts the loaded recipe on the board and, once
+  // the board accepts it, a recording as Start does. Asks first when that would clear
+  // an earlier roast; a roast already recording carries on.
+  function runRecipe() {
+    const go = () => {
+      S.recipeStartRecords = !recording();
+      send({ command: 'recipeStart' });
+    };
+    if (!recording() && (S.session.samples.length || S.session.events.length)) {
+      confirmThen('Run the recipe and start a new roast? The previous samples and events are cleared (download the CSV first to keep them).', go);
+    } else {
+      go();
+    }
   }
 
   function stopRoast() {
@@ -1900,6 +1916,10 @@
       S.recipeAt = Date.now();
       // A recipe that runs while a roast records is saved with it (roast record "recipe").
       if (recording() && r && r.state === 'running' && r.name) S.session.recipe = r.name;
+    } else if (cmd === 'recipeStart' && r.ok) {
+      if (S.recipeStartRecords && !recording()) beginRecording();
+      if (recording() && S.recipe && S.recipe.name) S.session.recipe = S.recipe.name;
+      S.recipeStartRecords = false;
     } else if (cmd === 'recipeLoad') {
       if (r.ok) recipeStatus('Loaded on the board' + (r.schedule ? ', with its schedule' : '') + '. Run recipe starts it.');
       else recipeStatus('Not loaded: ' + (r.reason || P.message(r.error)) + '.', true);
@@ -2447,7 +2467,6 @@
       renderRecipe();
     });
     $('#recipe-load').addEventListener('click', loadRecipe);
-    const runRecipe = () => send({ command: 'recipeStart' });
     $('#recipe-run').addEventListener('click', runRecipe);
     $('#rl-start').addEventListener('click', runRecipe);
     $('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and fan stay as they are.', () => send({ command: 'recipeAbort' })));
