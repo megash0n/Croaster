@@ -46,6 +46,10 @@ void putNum(T&& v, float x, float scale = 10.0f) { // JSON has no NaN
     else
         v = nullptr;
 }
+// Setpoint 0 C means off (no target, heater held off); it reads 0 in every unit, never 32 F.
+float setpointIn(float c, char unit) {
+    return c <= 0 ? 0.0f : fromCelsius(c, unit); // NaN stays NaN (null)
+}
 } // namespace
 
 namespace {
@@ -180,7 +184,7 @@ void writeDataFields(const Snapshot& s, char unit, JsonObject d) {
     putNum(d["BurnerVal"], s.heaterPct);
     putNum(d["FanVal"], s.fanPct);
     putNum(d["FanAssist"], s.fanAssistPct); // part of FanVal added by fan assist
-    putNum(d["SV"], fromCelsius(s.setpoint, unit));
+    putNum(d["SV"], setpointIn(s.setpoint, unit));
     d["Mode"] = modeName(s.mode);
     d["trip"] = tripName(s.trip);
     d["cooling"] = s.cooling;
@@ -208,7 +212,7 @@ void writeControlInfo(const Snapshot& s, const CooldownFan& cooldownFan, const W
                       JsonObject o) {
     o["mode"] = modeName(s.mode);
     o["pidInput"] = pidInputName(s.pidInput);
-    putNum(o["setpoint"], fromCelsius(s.setpoint, unit));
+    putNum(o["setpoint"], setpointIn(s.setpoint, unit));
     putNum(o["burner"], s.heaterPct);
     putNum(o["fan"], s.fanPct);
     JsonObject cf = o["cooldownFan"].to<JsonObject>();

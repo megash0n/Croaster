@@ -90,13 +90,28 @@
     return total > 0 ? Math.min(1, Math.max(0, done / total)) : u;
   }
 
-  // Steepest rate over the mean rate, and where it is (0..1).
+  // Steepest rate over the mean rate, and where it is (0..1): `at` is the first place,
+  // `spots` every run of points at that rate ({from, to}, 0..1; rates are whole numbers).
   function peak(r) {
     const n = POINTS - 1;
     let total = 0, at = 0;
     for (let i = 0; i < n; i++) total += (r[i] + r[i + 1]) / 2;
     for (let i = 1; i < POINTS; i++) if (r[i] > r[at]) at = i;
-    return { factor: total > 0 ? r[at] / (total / n) : 1, at: at / n };
+    const spots = [];
+    for (let i = 0; i < POINTS; i++) {
+      if (Math.abs(r[i] - r[at]) >= 0.5) continue;
+      const prev = spots[spots.length - 1];
+      if (prev && prev.to === (i - 1) / n) prev.to = i / n;
+      else spots.push({ from: i / n, to: i / n });
+    }
+    return { factor: total > 0 ? r[at] / (total / n) : 1, at: at / n, spots };
+  }
+
+  // `v` scaled so the largest is 100 (only the proportions of a rate curve matter).
+  // All zero: unchanged.
+  function normalize(v) {
+    const top = Math.max(...v);
+    return top > 0 ? v.map((x) => Math.round(x / top * 100)) : v.slice();
   }
 
   // SVG path of the rate curve `r` itself (not the ramp path) in a box at
@@ -221,6 +236,6 @@
       (isNum(w.fan) ? ' at fan ' + Math.round(w.fan) + ' %' : '') + '. BT will fall behind: lengthen the ramp or use a flatter shape.';
   }
 
-  return { POINTS, STEP, KNOTS, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, knotsOf, fromKnots, rates, fraction, peak, rateIcon, path,
+  return { POINTS, STEP, KNOTS, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, knotsOf, fromKnots, rates, fraction, peak, normalize, rateIcon, path,
     model, maxRorC, rampStartEstimate, checkRecipe, checkText };
 });

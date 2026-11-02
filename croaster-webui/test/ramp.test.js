@@ -33,6 +33,19 @@ test('fraction is the normalised area under the rate curve', () => {
   near(RS.peak(RS.PRESETS.front).factor, 2, 1e-9);
   assert.strictEqual(RS.peak(RS.PRESETS.back).at, 1);
   assert.strictEqual(RS.peak(RS.PRESETS.linear).factor, 1);
+  assert.deepStrictEqual(RS.peak(RS.PRESETS.back).spots, [{ from: 1, to: 1 }]);
+  assert.deepStrictEqual(RS.peak(RS.PRESETS.linear).spots, [{ from: 0, to: 1 }]);
+});
+
+test('peak lists every steepest place; normalize scales the tallest to 100', () => {
+  const both = RS.peak(RS.fromKnots([100, 0, 0, 0, 100]));
+  assert.deepStrictEqual(both.spots, [{ from: 0, to: 0 }, { from: 1, to: 1 }]);
+  assert.strictEqual(both.at, 0);
+  assert.deepStrictEqual(RS.normalize([0, 0, 0, 0, 5]), [0, 0, 0, 0, 100]);
+  assert.deepStrictEqual(RS.normalize([10, 20, 5]), [50, 100, 25]);
+  assert.deepStrictEqual(RS.normalize([0, 0]), [0, 0]);
+  // Small points, once scaled, give the full curve (whole-number rates lose detail when small).
+  assert.deepStrictEqual(RS.fromKnots(RS.normalize([0, 0, 0, 0, 5])), RS.fromKnots([0, 0, 0, 0, 100]));
 });
 
 test('snap and custom curves', () => {

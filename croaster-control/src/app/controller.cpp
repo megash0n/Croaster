@@ -200,8 +200,12 @@ void Controller::apply(const Command& c) {
         const Mode m = static_cast<Mode>(static_cast<int>(c.a));
         if (modeNeedsTuning(m, lim_.requireTunedGains, st_.gainsTuned))
             setAutotuneStatus(AutotuneStatus::Required);
-        else if (m == Mode::Manual || m == Mode::Pid)
+        else if (m == Mode::Manual || m == Mode::Pid) {
+            // PID from an idle Manual starts with no target: nothing heats until a setpoint is set.
+            if (m == Mode::Pid && st_.mode == Mode::Manual && !(manualHeater_ > 0))
+                st_.setpoint = 0;
             setMode(m, pv);
+        }
         break;
     }
     case Command::Kind::SetPidInput: {

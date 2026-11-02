@@ -378,6 +378,12 @@ void test_protocol_cooldown_end() {
     JsonDocument data;
     controlproto::writeDataFields(s, 'F', data.to<JsonObject>());
     TEST_ASSERT_TRUE(data["cooling"].as<bool>());
+    // Setpoint off (0 C) reads 0, not 32 F; a real setpoint converts.
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, data["SV"].as<float>());
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, d["setpoint"].as<float>());
+    s.setpoint = 200;
+    controlproto::writeDataFields(s, 'F', data.to<JsonObject>());
+    TEST_ASSERT_EQUAL_FLOAT(392.0f, data["SV"].as<float>());
 }
 
 void test_cooldown_ends_below_et() {

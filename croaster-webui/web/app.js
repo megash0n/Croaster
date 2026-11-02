@@ -297,7 +297,7 @@
       bt: isNum(d.BT) ? d.BT : null, et: isNum(d.ET) ? d.ET : null,
       dbt: isNum(d.DBT) ? d.DBT : null, det: isNum(d.DET) ? d.DET : null,
       h: isNum(d.BurnerVal) ? d.BurnerVal : null, f: isNum(d.FanVal) ? d.FanVal : null,
-      sv: isNum(d.SV) ? d.SV : null,
+      sv: isNum(d.SV) && d.SV > 0 ? d.SV : null, // 0 = setpoint off
       at: isNum(d.atTarget) ? d.atTarget : null,
       mode: (d.Mode || '') + (d.trip ? ' trip:' + d.trip : ''),
     };
@@ -487,7 +487,7 @@
     const assist = A.assistText(d);
     $('#t-fan-assist').hidden = !assist;
     $('#t-fan-assist').textContent = assist;
-    $('#t-sv').textContent = fmt(d.SV);
+    $('#t-sv').textContent = isNum(d.SV) && d.SV <= 0 ? 'off' : fmt(d.SV); // 0 = no setpoint, in any unit
     $('#t-mode').textContent = (d.Mode || '—') + (d.cooling ? ' · cooling' : '');
     const stop = $('#stop');
     stop.disabled = !R.stopAvailable(recording(), S.data, S.recipe);
@@ -904,7 +904,7 @@
 
     // Fill the forms from the board's values, except fields the user is editing.
     const c = S.control || {};
-    fill('setpoint', { value: d.SV });
+    fill('setpoint', { value: isNum(d.SV) && d.SV > 0 ? d.SV : '' }); // empty while off
     fill('pidInput', { value: d.Target });
     fill('pid', { kp: d.pidKp, ki: d.pidKi, kd: d.pidKd });
     if (c.cooldownFan) fill('cooldownFan', c.cooldownFan);
@@ -1852,7 +1852,7 @@
   // stays as it is until a point is moved.
   function openCurveEditor(a, power, done) {
     const dlg = $('#curve-dialog');
-    let rates = RS.rates('custom', a.curve);
+    let rates = RS.normalize(RS.rates('custom', a.curve)); // drawn with its tallest rate at 100; same path
     let knots = RS.knotsOf(rates).map(RS.snap);
     let touched = false;
     const setKnots = (k) => { knots = k; rates = RS.fromKnots(k); touched = true; };
@@ -1891,8 +1891,10 @@
       hi.textContent = isNum(to) && String(a.value).trim() !== '' ? to + (power ? ' %' : ' ' + unitLabel()) : 'target';
       prev.append(lo, hi);
       const pk = RS.peak(rates);
-      $('#curve-text').textContent = 'Steepest at ' + Math.round(pk.at * 100) + ' % of the ramp, ' + pk.factor.toFixed(1) +
-        '\u00d7 a linear ramp.';
+      const where = (u) => (u === 0 ? 'the start' : u === 1 ? 'the end' : Math.round(u * 100) + ' %');
+      const spots = pk.spots.map((s) => (s.from === s.to ? where(s.from) : 'from ' + where(s.from) + ' to ' + where(s.to)));
+      const list = spots.length > 1 ? spots.slice(0, -1).join(', ') + ' and ' + spots[spots.length - 1] : spots[0] || where(pk.at);
+      $('#curve-text').textContent = 'Steepest at ' + list + ' of the ramp, ' + pk.factor.toFixed(1) + '\u00d7 a linear ramp.';
     };
     const setAt = (ev) => {
       const r = svg.getBoundingClientRect();
@@ -1907,7 +1909,11 @@
     let drag = false, last = null;
     svg.onpointerdown = (ev) => { drag = true; last = null; svg.setPointerCapture(ev.pointerId); setAt(ev); ev.preventDefault(); };
     svg.onpointermove = (ev) => { if (drag) setAt(ev); };
-    svg.onpointerup = svg.onpointercancel = () => { drag = false; };
+    // On release the points scale so the tallest is at 100: only their proportions matter.
+    svg.onpointerup = svg.onpointercancel = () => {
+      if (drag && touched) { setKnots(RS.normalize(knots).map(RS.snap)); draw(); }
+      drag = false;
+    };
     const presets = $('#curve-presets');
     presets.textContent = '';
     for (const sh of ['linear', 'normal', 'front', 'back']) {
@@ -1998,7 +2004,7 @@
     const u = d.temp || 'C';
     const b = P.behindSchedule(S.behind.state, {
       nowMs: Date.now(), follow: !!(r && r.state === 'running' && r.follow), heater: d.BurnerVal,
-      btC: isNum(d.BT) ? P.toCelsius(d.BT, u) : NaN, setpointC: isNum(d.SV) ? P.toCelsius(d.SV, u) : NaN,
+      btC: isNum(d.BT) ? P.toCelsius(d.BT, u) : NaN, setpointC: isNum(d.SV) && d.SV > 0 ? P.toCelsius(d.SV, u) : NaN,
     }, { lagC: lagSetting() * (u === 'F' ? 5 / 9 : 1), holdMs: BEHIND_HOLD_MS });
     S.behind = b;
   }
