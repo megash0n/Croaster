@@ -1049,7 +1049,7 @@
       const notes = $('#rs-notes').value.trim();
       if (notes) rec.notes = notes; else delete rec.notes;
       delete rec.bean; delete rec.beanName;
-      Object.assign(rec, beanChoice()); // the link only: stock changes on the first save
+      Object.assign(rec, beanChoice()); // a new bean or weight moves the stock (RecordsPlugin::saveRoast)
       S.rec.pendingFor = null;
       send({ command: 'roastSave', id, roast: rec }, true);
       logReply('out', '→ roastSave ' + id);
@@ -1148,6 +1148,7 @@
       const pruned = (r.pruned || []).length;
       const st = r.stock;
       const stock = !st ? '' : st.error ? ' Bean stock not updated (' + P.message(st.error) + ').'
+        : st.returned ? ' Green weight returned to the previous bean.'
         : isNum(st.stockG) && st.stockG >= 0 ? ' ' + RC.stockText(st.stockG) + ' of the bean left.' : '';
       recStatus('Saved.' + (pruned ? ' The oldest ' + (pruned > 1 ? pruned + ' roasts were' : 'roast was') + ' deleted to make room.' : '') + stock);
       if (st) requestBeans();

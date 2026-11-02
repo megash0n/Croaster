@@ -131,5 +131,19 @@ private:
 // stays without) and saves it. `stockG` gets the new figure, or -1 when the
 // bean has no stock recorded.
 Error useStock(Store& beans, const char* beanId, float greenG, float& stockG);
+// Puts `greenG` back on the bean's stock (a saved roast moved to another bean,
+// unlinked, or its green weight changed). Same rules and `stockG` as useStock.
+Error returnStock(Store& beans, const char* beanId, float greenG, float& stockG);
+
+// The stock a roast record takes: its bean id and green weight (both needed;
+// otherwise bean is empty and nothing was taken).
+struct StockUse {
+    std::string bean;
+    float greenG = 0;
+    bool operator==(const StockUse& o) const {
+        return bean == o.bean && (bean.empty() || greenG == o.greenG);
+    }
+};
+StockUse stockUseOf(JsonObjectConst roast);
 
 } // namespace records

@@ -101,6 +101,14 @@ String RecordsPlugin::saveRoast(const JsonObject& json) {
         return failure("roastSave", records::Error::Busy, busy);
     if (!json["roast"].is<JsonObject>())
         return failure("roastSave", records::Error::BadRequest);
+    // An edit of a saved roast: what it took from bean stock before the change.
+    records::StockUse before;
+    if (*idOf(json)) {
+        std::string text;
+        JsonDocument prev;
+        if (roasts_.get(idOf(json), text) == records::Error::None && !deserializeJson(prev, text))
+            before = records::stockUseOf(prev.as<JsonObjectConst>());
+    }
     records::Saved saved;
     const char* reason = nullptr;
     const records::Error e = roasts_.save(idOf(json), json["roast"].as<JsonObjectConst>(), saved, &reason);
@@ -114,12 +122,26 @@ String RecordsPlugin::saveRoast(const JsonObject& json) {
     JsonArray p = r["pruned"].to<JsonArray>();
     for (const std::string& id : saved.pruned)
         p.add(id.c_str());
-    JsonObjectConst rec = json["roast"].as<JsonObjectConst>();
-    if (saved.created && rec["bean"].is<const char*>() && rec["greenG"].is<float>()) {
+    // The green weight comes off the linked bean once: at the first save, or when
+    // an edit links a bean or changes the bean or weight (the previous bean gets
+    // its weight back first). "stock" reports the bean now linked, else the one
+    // that got weight back ("returned").
+    const records::StockUse after = records::stockUseOf(json["roast"].as<JsonObjectConst>());
+    if (saved.created)
+        before = records::StockUse();
+    if (!(before == after)) {
         float left = -1;
-        const records::Error s = records::useStock(beans_, rec["bean"].as<const char*>(), rec["greenG"].as<float>(), left);
+        records::Error s = records::Error::None;
+        if (!before.bean.empty())
+            s = records::returnStock(beans_, before.bean.c_str(), before.greenG, left);
+        const bool returned = after.bean.empty();
+        if (!returned) {
+            s = records::useStock(beans_, after.bean.c_str(), after.greenG, left); // a deleted previous bean is skipped
+        }
         JsonObject st = r["stock"].to<JsonObject>();
-        st["bean"] = rec["bean"];
+        st["bean"] = returned ? before.bean.c_str() : after.bean.c_str();
+        if (returned)
+            st["returned"] = true;
         if (s == records::Error::None)
             st["stockG"] = left;
         else

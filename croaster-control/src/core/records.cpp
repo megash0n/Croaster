@@ -372,7 +372,9 @@ Error Store::remove(const char* id) {
     return Error::None;
 }
 
-Error useStock(Store& beans, const char* beanId, float greenG, float& stockG) {
+namespace {
+// Adds deltaG to the bean's "stockG" (not below 0); a bean without stock stays without.
+Error moveStock(Store& beans, const char* beanId, float deltaG, float& stockG) {
     stockG = -1;
     std::string text;
     const Error e = beans.get(beanId, text);
@@ -384,13 +386,31 @@ Error useStock(Store& beans, const char* beanId, float greenG, float& stockG) {
     JsonObject b = doc.as<JsonObject>();
     if (!b["stockG"].is<float>())
         return Error::None;
-    const float left = std::max(0.0f, b["stockG"].as<float>() - std::max(0.0f, greenG));
+    const float left = std::max(0.0f, b["stockG"].as<float>() + deltaG);
     b["stockG"] = std::round(left * 10) / 10;
     Saved saved;
     const Error w = beans.save(beanId, b, saved);
     if (w == Error::None)
         stockG = b["stockG"].as<float>();
     return w;
+}
+} // namespace
+
+Error useStock(Store& beans, const char* beanId, float greenG, float& stockG) {
+    return moveStock(beans, beanId, -std::max(0.0f, greenG), stockG);
+}
+
+Error returnStock(Store& beans, const char* beanId, float greenG, float& stockG) {
+    return moveStock(beans, beanId, std::max(0.0f, greenG), stockG);
+}
+
+StockUse stockUseOf(JsonObjectConst roast) {
+    StockUse u;
+    if (roast["bean"].is<const char*>() && roast["greenG"].is<float>()) {
+        u.bean = roast["bean"].as<const char*>();
+        u.greenG = std::max(0.0f, roast["greenG"].as<float>());
+    }
+    return u;
 }
 
 } // namespace records

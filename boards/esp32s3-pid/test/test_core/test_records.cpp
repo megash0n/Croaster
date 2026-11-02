@@ -183,6 +183,8 @@ void test_beans_refuse_when_full_and_roasts_use_stock() {
                       save(beans, R"({"version":1,"name":"No stock","origin":"Peru","process":"natural"})", out));
     TEST_ASSERT_EQUAL(records::Error::None, records::useStock(beans, out.id.c_str(), 10, left));
     TEST_ASSERT_EQUAL_FLOAT(-1, left); // no stock recorded: unchanged
+    TEST_ASSERT_EQUAL(records::Error::None, records::returnStock(beans, id.c_str(), 120, left));
+    TEST_ASSERT_EQUAL_FLOAT(120, left); // a relinked roast gives its weight back
     for (size_t i = beans.list().size(); i < records::kMaxBeans; i++) {
         char name[16];
         snprintf(name, sizeof name, "Bean %u", (unsigned)i);
@@ -194,7 +196,23 @@ void test_beans_refuse_when_full_and_roasts_use_stock() {
     TEST_ASSERT_EQUAL(records::kMaxBeans, beans.list().size());
 }
 
+// What a saved roast took from stock, for edits that link, change or unlink a bean.
+void test_roast_stock_use() {
+    JsonDocument a, b, c;
+    deserializeJson(a, R"({"bean":"kenya","greenG":250})");
+    deserializeJson(b, R"({"bean":"kenya","greenG":200})");
+    deserializeJson(c, R"({"bean":"kenya"})");
+    const records::StockUse ua = records::stockUseOf(a.as<JsonObjectConst>());
+    TEST_ASSERT_EQUAL_STRING("kenya", ua.bean.c_str());
+    TEST_ASSERT_EQUAL_FLOAT(250, ua.greenG);
+    TEST_ASSERT_FALSE(ua == records::stockUseOf(b.as<JsonObjectConst>())); // weight changed
+    TEST_ASSERT_TRUE(records::stockUseOf(c.as<JsonObjectConst>()).bean.empty()); // no weight: nothing taken
+    TEST_ASSERT_TRUE(records::StockUse() == records::stockUseOf(c.as<JsonObjectConst>()));
+    TEST_ASSERT_TRUE(ua == records::stockUseOf(a.as<JsonObjectConst>()));
+}
+
 void runRecordTests() {
+    RUN_TEST(test_roast_stock_use);
     RUN_TEST(test_roast_record_checks);
     RUN_TEST(test_roasts_keep_the_newest);
     RUN_TEST(test_bean_record_checks);
