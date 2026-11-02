@@ -69,6 +69,32 @@
 // CPID_REQUIRE_MAINS: trip only after the zero-cross has been missing this long while heating
 #define CPID_MAINS_GRACE_MS 2000
 
+// ---- Optional fans (docs/wiring.md) -----------------------------------------
+// 0 = not fitted. platformio.ini can set them with -D (e.g. -D CPID_FAN1=1).
+// Scroll fan: AC fan on a relay module (HIGH = on); runs during the cooldown,
+// and on/off from the Live page in Manual mode when idle.
+#ifndef CPID_SCROLL_FAN
+#    define CPID_SCROLL_FAN 0
+#endif
+#define CPID_PIN_SCROLL_FAN 7
+// 12 V fans on MOSFET trigger modules (LEDC PWM; the modules take up to 20 kHz).
+// FAN1 (case fan) follows the box temperature, FAN2 (ESP fan) the ESP32-S3 chip
+// temperature. The turn-on temperatures are first-boot defaults, saved in NVS
+// when changed; each fan turns off 3 C below its turn-on temperature.
+#ifndef CPID_FAN1
+#    define CPID_FAN1 0
+#endif
+#ifndef CPID_FAN2
+#    define CPID_FAN2 0
+#endif
+#define CPID_PIN_FAN1 15
+#define CPID_PIN_FAN2 16
+#define CPID_AUX_FAN_PWM_HZ 10000
+#define CPID_FAN1_ON_C 45
+#define CPID_FAN2_ON_C 60
+// Box temperature warning on the page (C); saved in NVS when changed.
+#define CPID_BOX_WARN_C 50
+
 // ---- Display ----------------------------------------------------------------
 #define CMON_DISPLAY_NONE 0
 #define CMON_DISPLAY_SSD1306 1            // Croaster's shared screen (boards/common); header shows heater/fan/mode

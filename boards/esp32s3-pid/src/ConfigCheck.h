@@ -57,6 +57,14 @@ constexpr int kPins[] = {
 #endif
 #if CMON_DISPLAY != CMON_DISPLAY_NONE
     CMON_PIN_I2C_SDA,    CMON_PIN_I2C_SCL,
+#endif#if CPID_SCROLL_FAN
+    CPID_PIN_SCROLL_FAN,
+#endif
+#if CPID_FAN1
+    CPID_PIN_FAN1,
+#endif
+#if CPID_FAN2
+    CPID_PIN_FAN2,
 #endif
 };
 constexpr int kPinCount = sizeof(kPins) / sizeof(kPins[0]);

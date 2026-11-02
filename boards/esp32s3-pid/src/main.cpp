@@ -76,6 +76,25 @@ ControlSettings defaults() {
     return d;
 }
 ControlPlugin plugin(controller);
+#include <app/AuxFansPlugin.h>
+AuxFansPlugin::Config auxFansConfig() {
+    AuxFansPlugin::Config c;
+#if CPID_SCROLL_FAN
+    c.scrollPin = CPID_PIN_SCROLL_FAN;
+#endif
+#if CPID_FAN1
+    c.fan1Pin = CPID_PIN_FAN1;
+#endif
+#if CPID_FAN2
+    c.fan2Pin = CPID_PIN_FAN2;
+#endif
+    c.pwmHz = CPID_AUX_FAN_PWM_HZ;
+    c.fan1OnC = CPID_FAN1_ON_C;
+    c.fan2OnC = CPID_FAN2_ON_C;
+    c.boxWarnC = CPID_BOX_WARN_C;
+    return c;
+}
+AuxFansPlugin auxFans(controller, auxFansConfig()); // box temperature, scroll fan, FAN1/FAN2
 #include <app/AutotunePlugin.h>
 AutotunePlugin autotuner(controller, plugin, CPID_HEATER_MAX_PERCENT); // autotune report, apply and discard (docs/autotune)
 static_assert(CPID_AUTOTUNE_RULE_ZN_PI == static_cast<int>(autotune::Rule::ZieglerNicholsPi) &&
@@ -190,6 +209,7 @@ void setup() {
     fan.begin();
     probes.begin();
     const ControlSettings settings = ConfigStore::load(defaults()); // NVS is ready from here on
+    auxFans.begin(); // optional fans off
     controller.configureAutotune(autotuneConfig());
     controller.configureModelUse(modelUse(settings.fanAssist));
     {
@@ -200,6 +220,10 @@ void setup() {
     controller.begin(settings.gains, settings.gainsTuned, settings.pidInput, settings.cooldownFan.trip,
                      settings.cooldownFan.endC, CPID_CONTROL_CORE, configMAX_PRIORITIES - 3);
     plugin.attach(app, settings);
+    auxFans.attach(app);
+    plugin.onData([](JsonObject& data) {
+        auxFans.writeData(data);
+    });
     autotuner.attach(app);
     recipes.attach(app);
 #if CPID_ENABLE_LIBRARY
@@ -232,6 +256,7 @@ void loop() {
     plugin.loop();
     autotuner.loop();
     recipes.loop();
+    auxFans.loop();
 #if CMON_ENABLE_WEBUI
     webUi.loop();
 #endif
