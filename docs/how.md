@@ -242,6 +242,22 @@ trips `comms`: heater off; the controller sets the fan to the trip speed. Profil
 because they are meant to run on their own. The timeout and an off switch are
 settings; see the board README, "Comms watchdog".
 
+### Optional fans and box temperature
+`app/AuxFansPlugin` (logic in `core/aux_fans.h`) runs from `loop()` every
+500 ms on the controller snapshot. Flags in `config.h`, default 0, set to 1 in
+`platformio.ini` with `-D` (the `#ifndef` guards let the flag win over the
+force-included `config.h`):
+- `CPID_SCROLL_FAN` (GPIO 7, relay): on while `Snapshot::cooling`, plus a
+  manual on/off when idle (Manual, heater 0, no cooldown). The manual request
+  ends when a cooldown starts, the heater comes on or the mode changes.
+- `CPID_FAN1` / `CPID_FAN2` (GPIO 15 / 16, LEDC 10 kHz, on/off): FAN1 on the
+  box temperature (`max31855::boxTemperatureC`, else `temperatureRead()`),
+  FAN2 on the chip temperature; 3 C hysteresis; no reading -> on.
+Turn-on temperatures and the box warning (`CPID_FAN1_ON_C`, `CPID_FAN2_ON_C`,
+`CPID_BOX_WARN_C`) are saved in NVS namespace `aux`; the Auto/On/Off overrides
+are not (Auto after boot). Data: `"aux"` object; command `auxFans`. Wiring:
+docs/wiring.md.
+
 ## Where things live
 
 | Path | What |

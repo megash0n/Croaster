@@ -12,6 +12,7 @@ set on the board (see "Units").
 
 ## Before you start
 
+- Pin-by-pin wiring for the board and the optional fans: [wiring.md](wiring.md).
 - The board drives the Behmor's heater and fan directly. **The Behmor's own
   controls and thermal cutoff are bypassed**, so the board's limits are the
   only protection. Stay with the roaster whenever the heater is on.

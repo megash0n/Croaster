@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Optional fans and box temperature (D34).** Scroll fan on a relay (runs
+  during the cooldown; on/off from the Live page when idle), a case fan
+  (FAN1) on the box temperature and an ESP fan (FAN2) on the ESP32-S3 chip
+  temperature, each with a saved turn-on temperature and Auto/On/Off. The
+  Live page shows the box temperature, its source and the chip temperature,
+  amber at a saved warning (default 50 C). Pin table: docs/wiring.md.
 - **Green coffee beans.** A Beans tab keeps bean records on the board
   (version 1, `/beans`, up to 100; a full store refuses rather than delete
   anything). Name, origin and process are required; region, varietal, farm,

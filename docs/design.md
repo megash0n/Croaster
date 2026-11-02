@@ -325,6 +325,7 @@ New 2026-10-31, open for Shawn:
 | D31 | Recipe ramp shapes (rate-of-climb curves), power ramps, charge temperature, ramp feasibility check. |
 | D32 | Setpoint ramps start at the PID input (BT) when the step applies, with a bumpless PID restart. |
 | D33 | Fake readings button is green while dummy mode is on, from a `dummy` data field. |
+| D34 | Optional scroll fan, case fan (FAN1), ESP fan (FAN2) and box temperature. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1726,3 +1727,35 @@ See `boards/esp32s3-pid/README.md` (pins, power, probe isolation, IPEX).
 `control-parity.md` (yaeger vs ours, item by item), `artisan-settings.md`
 (every `.aset` setting with its source), `autotune/` (multi-point autotune,
 D29).
+
+### D34. Optional fans and box temperature — new 2026-11-02, open for Shawn
+Shawn: fan1 is the case fan on the sensors with the ESP as fallback; fan2 is
+on the ESP temperature, mounted over the ESP; each with a configurable
+turn-on temperature. Wiring: docs/wiring.md.
+
+- **Scroll fan.** Follows the cooldown: stop, emergency off and every safety
+  trip start one, so the fan runs after any of them until ET is below the
+  cooldown end; with no cooldown it is off. This is the safest reading of
+  "off on STOP unless the cooldown is active": the fan only adds cooling.
+  Manual on/off is accepted only in Manual mode with the heater off and no
+  cooldown, and is dropped when the heater comes on, the mode changes or a
+  cooldown starts. Not part of the autotune fan test.
+- **FAN1 / FAN2.** On/off at full duty through LEDC (10 kHz, under the
+  trigger module's 20 kHz limit), 3 C hysteresis, and on when the reading is
+  missing. Box temperature: average of the valid MAX31855 cold-junction
+  readings (no NoDevice fault, -40..125 C), else the ESP32-S3 chip
+  temperature; MAX6675 boards always use the chip. No upstream change: the
+  driver already returns the cold-junction temperature.
+- **Settings.** Turn-on temperatures (25..90 C) and the box warning
+  (30..100 C, default 50 C) are saved in NVS; the Auto/On/Off overrides are
+  not, so a fan forced off does not stay off after a reboot.
+- **Names pending confirmation:** `CPID_SCROLL_FAN`, `CPID_FAN1`,
+  `CPID_FAN2`, `CPID_PIN_SCROLL_FAN`, `CPID_PIN_FAN1`, `CPID_PIN_FAN2`,
+  `CPID_AUX_FAN_PWM_HZ`, `CPID_FAN1_ON_C`, `CPID_FAN2_ON_C`,
+  `CPID_BOX_WARN_C`; `AuxFansPlugin`, `core/aux_fans.h`,
+  `max31855::boxTemperatureC`, `Snapshot::box`; data object `aux` (`box`,
+  `boxSrc`, `chip`, `warn`, `scroll`, `fan1`/`fan2` with `on`, `mode`, `at`);
+  command `auxFans` (`scroll`, `fan1`, `fan2`, `fan1On`, `fan2On`,
+  `boxWarn`); page ids `tile-box`, `aux-row`, `scroll-fan`, `aux-fan1`,
+  `aux-fan2`; NVS namespace `aux` (`f1On`, `f2On`, `boxW`).
+
