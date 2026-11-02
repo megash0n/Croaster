@@ -164,8 +164,8 @@
           <div class="field">
             <span>Mode</span>
             <div class="row-buttons">
-              <button type="button" data-cmd='{"command":{"mode":"manual"}}'>Manual</button>
-              <button type="button" data-cmd='{"command":{"mode":"pid"}}'>PID</button>
+              <button type="button" data-mode="Manual" data-cmd='{"command":{"mode":"manual"}}'>Manual</button>
+              <button type="button" data-mode="PID" data-cmd='{"command":{"mode":"pid"}}'>PID</button>
             </div>
           </div>
           <form class="field" data-send="pidInput">
@@ -220,7 +220,7 @@
           <h2>Autotune</h2>
           <p class="muted small" id="at-plan">Measures how the roaster responds at a few test temperatures and calculates PID gains from it.</p>
           <div class="row-buttons">
-            <button type="button" id="at-start">Start autotune</button>
+            <button type="button" id="at-start" data-mode="Tuning">Start autotune</button>
             <button type="button" id="at-stop" class="stop-inline" hidden data-cmd='{"command":"stop"}' data-confirm="Stop autotune? The heater turns off, the board switches to Manual and sets the fan to the cooldown speed. The gains are not changed.">Stop autotune</button>
           </div>
           <p class="small">Status: <span class="num" id="autotune-status">—</span> <span class="err-text" id="at-error"></span></p>
@@ -259,7 +259,7 @@
           <div class="row-buttons">
             <button type="button" class="ghost" id="profile-add">Add step</button>
             <button type="button" id="profile-load">Load to device</button>
-            <button type="button" data-cmd='{"command":"startProfile"}'>Start profile</button>
+            <button type="button" data-mode="Profile" data-cmd='{"command":"startProfile"}'>Start profile</button>
           </div>
           <p class="small" id="profile-status"></p>
         </div>

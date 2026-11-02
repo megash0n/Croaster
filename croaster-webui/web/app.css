@@ -391,3 +391,6 @@ dialog.sheet {
 .tile.box.hot .tile-value { color: var(--warn); }
 .aux-row { align-items: center; margin-top: var(--gap); }
 .aux-row label { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The board's current mode (render: button[data-mode]) */
+button.mode-on { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }

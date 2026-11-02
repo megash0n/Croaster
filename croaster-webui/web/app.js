@@ -447,6 +447,12 @@
     $('#t-trip').textContent = d.trip ? 'TRIP ' + d.trip : (d.Target ? 'input ' + d.Target : '');
     $('.tile.mode').classList.toggle('tripped', !!d.trip);
     renderAux(d.aux);
+    // The button of the board's current mode is highlighted (Manual, PID, autotune, profile).
+    for (const b of $$('button[data-mode]')) {
+      const on = d.Mode === b.dataset.mode;
+      b.classList.toggle('mode-on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
     for (const e of $$('[data-field]')) {
       if (e.classList.contains('stepper')) continue;
       e.hidden = S.data ? d[e.dataset.field] === undefined : !S.info.controls;
