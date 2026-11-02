@@ -101,6 +101,7 @@ struct Command {
         DiscardAutotune, // drop pending autotune results
         SetFanAssist,    // a = 1/0; acts only with a saved fan test (fan_assist.h)
         SetCooldownEnd,  // a = C: ET below which the cooldown ends (CooldownFan::endC)
+        SetMainsTrip,    // a = 1/0: nomains trip on or off (SafetyLimits::requireMains)
     };
     Kind kind;
     float a = 0, b = 0, c = 0;

@@ -32,6 +32,11 @@ char ControlPlugin::unit() const {
 void ControlPlugin::attach(CroasterApp& app, const ControlSettings& settings) {
     app_ = &app;
     settings_ = settings;
+    if (settings_.mainsTripAvailable) { // the saved nomains setting replaces the build default
+        Command c{Command::Kind::SetMainsTrip};
+        c.a = settings_.mainsTrip ? 1 : 0;
+        controller_.submit(c);
+    }
     for (size_t i = 0; i < controlproto::kNestedKeyCount; i++) {
         const char* key = controlproto::kNestedKeys[i];
         app.commands().onJsonCommand(key, [this, key](const JsonObject& json) {
@@ -134,6 +139,13 @@ void ControlPlugin::apply(const controlproto::Parsed& p) {
         settings_.fanAssist = p.fanAssist;
         ConfigStore::saveFanAssist(p.fanAssist);
     }
+    if (p.hasMainsTrip && settings_.mainsTripAvailable) {
+        settings_.mainsTrip = p.mainsTrip;
+        ConfigStore::saveMainsTrip(p.mainsTrip);
+        Command c{Command::Kind::SetMainsTrip};
+        c.a = p.mainsTrip ? 1 : 0;
+        controller_.submit(c);
+    }
 }
 
 String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
@@ -159,6 +171,8 @@ String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
     JsonObject r = beginReply(doc, name);
     controlproto::writeControlInfo(controller_.snapshot(), settings_.cooldownFan, settings_.watchdog, unit(), r);
     r["fanAssist"]["max"] = settings_.fanAssistMaxPct;
+    if (settings_.mainsTripAvailable) // AC dimmer builds only
+        r["mainsTrip"] = settings_.mainsTrip;
     // Smallest free loop task stack since boot, in bytes (ESP-IDF counts bytes).
     r["loopStackFree"] = uxTaskGetStackHighWaterMark(nullptr);
     return finishReply(doc);

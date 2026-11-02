@@ -22,6 +22,7 @@ ControlSettings ConfigStore::load(const ControlSettings& d) {
     s.watchdog.enabled = p.getBool("wdOn", d.watchdog.enabled);
     s.watchdog.timeoutS = p.getUShort("wdS", d.watchdog.timeoutS);
     s.fanAssist = p.getBool("fanAs", d.fanAssist);
+    s.mainsTrip = p.getBool("mainsOn", d.mainsTrip);
     p.end();
     return s;
 }
@@ -64,6 +65,13 @@ void ConfigStore::saveFanAssist(bool on) {
     Preferences p;
     p.begin(kNs, false);
     p.putBool("fanAs", on);
+    p.end();
+}
+
+void ConfigStore::saveMainsTrip(bool on) {
+    Preferences p;
+    p.begin(kNs, false);
+    p.putBool("mainsOn", on);
     p.end();
 }
 

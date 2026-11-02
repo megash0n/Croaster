@@ -207,6 +207,12 @@
             <label>timeout s <input type="number" name="timeout" min="2" max="600" step="1" required></label>
             <button type="submit">Save</button>
           </form>
+          <form class="field wide" data-send="mainsTrip" hidden>
+            <span>Mains trip</span>
+            <label><input type="checkbox" name="enabled"> enabled</label>
+            <button type="submit">Save</button>
+            <span class="muted small">Turns the heater off when the fan dimmer loses AC mains (no zero-cross), since the fan cannot run then. Saved on the board.</span>
+          </form>
           <form class="field wide" data-send="auxFans" hidden>
             <span>Electronics fans</span>
             <label title="Case fan (FAN1): on at the box temperature, off 3 C below">case fan on at <input type="number" name="fan1On" step="any"> <span data-unit></span></label>

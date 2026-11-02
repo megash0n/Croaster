@@ -73,6 +73,8 @@ ControlSettings defaults() {
     d.watchdog = {CPID_WATCHDOG_ENABLED != 0, CPID_WATCHDOG_TIMEOUT_S};
     d.fanAssist = CPID_FAN_ASSIST != 0;
     d.fanAssistMaxPct = CPID_FAN_ASSIST_MAX;
+    d.mainsTrip = CPID_REQUIRE_MAINS != 0;
+    d.mainsTripAvailable = CPID_FAN == CPID_FAN_AC_DIMMER;
     return d;
 }
 ControlPlugin plugin(controller);

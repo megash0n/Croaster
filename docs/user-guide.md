@@ -477,9 +477,11 @@ mode again. If the cause is still there, the trip comes back at once.
   the timeout (2 to 600 s) or turns it off.
 - **ota**: a firmware update is being written. The heater stays off until
   it finishes.
-- **nomains**: the fan dimmer sees no mains zero-cross while heating. This
-  check is off in the default build (`CPID_REQUIRE_MAINS 0`), so this trip
-  does not occur unless it is enabled.
+- **nomains**: the fan dimmer has seen no mains zero-cross for 2 seconds
+  while heating. Controls > Safety > Mains trip turns it on or off (on by
+  default on AC dimmer builds; saved on the board). Turning it off asks
+  first: the heater then keeps running when mains to the fan is lost. It is
+  meant for bench tests without mains.
 
 ### Cooldown
 

@@ -314,6 +314,9 @@ void Controller::apply(const Command& c) {
     case Command::Kind::SetCooldownEnd:
         cooldownEndC_ = c.a;
         break;
+    case Command::Kind::SetMainsTrip:
+        lim_.requireMains = c.a != 0;
+        break;
     case Command::Kind::Trip:
         st_.trip = static_cast<SafetyTrip>(static_cast<int>(c.a));
         manualHeater_ = 0;

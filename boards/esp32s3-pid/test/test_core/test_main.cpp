@@ -408,6 +408,12 @@ void test_protocol_watchdog() {
     TEST_ASSERT_TRUE(p.hasWatchdogTimeout);
     TEST_ASSERT_EQUAL_UINT16(20, p.watchdogTimeoutS);
 
+    p = parse(R"({"command":{"mainsTrip":false}})", 'C', "mainsTrip");
+    TEST_ASSERT_TRUE(p.hasMainsTrip);
+    TEST_ASSERT_FALSE(p.mainsTrip);
+    TEST_ASSERT_EQUAL(0, (int)p.count); // a setting, applied by ControlPlugin
+    TEST_ASSERT_FALSE(parse(R"({"command":{"mainsTrip":0}})").hasMainsTrip);
+
     p = parse(R"({"command":{"watchdog":{"timeout":0}}})"); // out of range: ignored
     TEST_ASSERT_FALSE(p.hasWatchdogTimeout);
     p = parse(R"({"command":{"watchdog":{"timeout":601}}})");

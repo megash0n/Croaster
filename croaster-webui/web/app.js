@@ -42,11 +42,13 @@
     'cooldownFan.stop': 'Cooldown fan after stop (%)', 'cooldownFan.trip': 'Cooldown fan after trip (%)',
     'cooldownFan.end': 'Cooldown ends below ET', cooling: 'Cooling',
     'watchdog.enabled': 'Comms watchdog', 'watchdog.timeout': 'Watchdog timeout (s)', 'pid.kp': 'PID Kp',
-    'pid.ki': 'PID Ki', 'pid.kd': 'PID Kd', tuned: 'Gains tuned', mainsOk: 'Mains detected',
+    'pid.ki': 'PID Ki', 'pid.kd': 'PID Kd', tuned: 'Gains tuned', mainsOk: 'Mains detected', mainsTrip: 'Mains trip',
     profileElapsed: 'Profile elapsed (s)', ambient: 'Cold junction',
     ver: 'Firmware version', ip: 'IP address', ssid: 'WiFi network', board: 'Board', darkMode: 'Dark screen',
     brightness: 'Brightness (%)',
   };
+  const MAINS_TRIP_OFF = 'Danger: turn off the mains trip? The heater will no longer turn off when the fan dimmer ' +
+    'loses AC mains, so it can keep heating with the fan stopped and overheat the roaster. Use only for bench tests without mains.';
   const ALWAYS_LISTED = ['BT', 'ET', 'DBT', 'DET']; // left out of the telemetry while a probe has no reading
 
   const S = {
@@ -858,6 +860,8 @@
     fill('pid', { kp: d.pidKp, ki: d.pidKi, kd: d.pidKd });
     if (c.cooldownFan) fill('cooldownFan', c.cooldownFan);
     if (c.watchdog) fill('watchdog', c.watchdog);
+    $('form[data-send="mainsTrip"]').hidden = typeof c.mainsTrip !== 'boolean'; // AC dimmer builds only
+    if (typeof c.mainsTrip === 'boolean') fill('mainsTrip', { enabled: c.mainsTrip });
     const fa = c.fanAssist;
     $('form[data-send="fanAssist"]').hidden = !fa;
     if (fa) {
@@ -894,6 +898,7 @@
       case 'cooldownFan': return { cooldownFan: { stop: n('stop'), trip: n('trip'), end: n('end') } };
       case 'watchdog': return { watchdog: { enabled: f.enabled.checked, timeout: Math.round(n('timeout')) } };
       case 'fanAssist': return { fanAssist: f.enabled.checked };
+      case 'mainsTrip': return { mainsTrip: f.enabled.checked };
       case 'auxFans': {
         const o = { boxWarn: n('boxWarn') };
         for (const k of ['fan1On', 'fan2On']) if (!f[k].closest('label').hidden && f[k].value !== '') o[k] = n(k);
@@ -2416,11 +2421,12 @@
         ev.preventDefault();
         const payload = formPayload(form);
         if (!payload) return;
-        confirmThen(form.dataset.confirm, () => {
+        const mainsOff = payload.mainsTrip === false;
+        confirmThen(mainsOff ? MAINS_TRIP_OFF : form.dataset.confirm, () => {
           send({ command: payload });
           delete form.dataset.touched;
           if (form.dataset.send === 'wifiConnect') form.reset();
-        });
+        }, mainsOff ? 'Turn off' : undefined);
       });
     }
     $('#profile-add').addEventListener('click', () => {

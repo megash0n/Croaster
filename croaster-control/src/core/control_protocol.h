@@ -20,6 +20,7 @@
 //   {"command":{"watchdog":{"enabled":bool,"timeout":s}}} saved to NVS; either
 //                                            field alone works; timeout 2..600 s
 //   {"command":{"fanAssist":true|false}}    fan assist option (fan_assist.h), saved to NVS
+//   {"command":{"mainsTrip":true|false}}    AC dimmer: heater trips when mains is lost, saved to NVS
 //   {"command":{"profile":[{"duration":s,"setpoint":T,"interpolation":"ease-out","fanValue":%},...]}}
 //                                            limits in RoastProfile::loadJson
 // Basic:
@@ -75,6 +76,8 @@ struct Parsed {
     uint16_t watchdogTimeoutS = 0;
     bool hasFanAssist = false; // persist this
     bool fanAssist = false;
+    bool hasMainsTrip = false; // persist this (AC dimmer builds only)
+    bool mainsTrip = true;
 };
 
 // `cmd` is the object under "command"; `unit` is Croaster's unit ('C','F','K').
