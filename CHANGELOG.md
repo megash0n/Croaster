@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **End of roast (D35).** End roast asks as STOP does and ends the roast
+  the same way: heater off, recipe aborted, Manual, cooldown fan, recording
+  ends. Drop marks the event, then offers to end the roast. The save dialog
+  opens once per roast, at Drop or End roast, with STOP and the cooldown end
+  as fallbacks.
+- **Mains trip setting (D36).** Controls > Safety turns the `nomains` trip
+  on or off (AC dimmer builds; on by default; saved on the board). Turning
+  it off needs a danger confirmation.
+- **Autotune on the Live chart.** BT, ET, RoR, heater and fan are plotted
+  while autotune runs, labelled with the current point and cycle; not
+  recorded or saved.
+- **Saved roasts keep the recipe** that ran, shown in the list, the edit
+  dialog and the CSV.
+- **Bean stock follows a saved roast's bean link**: linking, changing or
+  unlinking the bean later moves the green weight once.
+- **Active mode highlighted** (Manual, PID, autotune, profile).
 - **Optional fans and box temperature (D34).** Scroll fan on a relay (runs
   during the cooldown; on/off from the Live page when idle), a case fan
   (FAN1) on the box temperature and an ESP fan (FAN2) on the ESP32-S3 chip
@@ -200,6 +216,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `docs/artisan-settings.md`.
 
 ### Fixed
+- Switching to PID while idle no longer forces the fan to 30 % or enables
+  STOP: the fan floor applies only when the heater actually delivers a
+  pulse, and PID at setpoint 0 keeps the heater off.
+- Run recipe on Live starts the roast recording, as on the Recipe tab.
 - **Dummy readings in Celsius while the unit is °F or K (T61).** Local
   change to upstream code (`croaster/src/CroasterCore.cpp`
   `readSensors()`), suitable to offer upstream. With dummy data on, BT and ET
@@ -364,6 +384,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Autotune/Stop/Clear trip buttons; 1 s sampling; path `WebSocket`.
 
 ### Changed
+- `stop` resets the setpoint to 0 (off).
+- `CPID_REQUIRE_MAINS` is now the default of the Mains trip setting and
+  follows `CPID_FAN` (on for the AC dimmer).
 - **Custom ramp curve editor uses 5 points.** The points sit at 0, 25, 50,
   75 and 100 % of the ramp time and are dragged up or down. The board still
   receives 21 rates, filled in by monotone cubic interpolation, which never
