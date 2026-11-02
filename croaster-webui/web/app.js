@@ -374,13 +374,18 @@
     }
   }
 
-  function stopRoast() {
-    if (!R.stopAvailable(recording(), S.data, S.recipe)) return;
+  // What STOP, End roast and Drop do on the board, for their confirmations.
+  function stopEffects() {
     const c = S.control && S.control.cooldownFan;
     const fan = c && isNum(c.stop) ? ' (' + c.stop + ' %)' : '';
-    confirmThen('Stop the roast? The heater turns off, any running recipe is aborted, the board switches to Manual ' +
-      '(ending PID, profile or autotune), the fan runs at the cooldown speed' + fan + ' until ET falls below the ' +
-      'cooldown end' + (recording() ? ', and recording ends.' : '.'), () => {
+    return 'The heater turns off, any running recipe is aborted, the board switches to Manual ' +
+      '(ending PID, profile or autotune) with the setpoint off, the fan runs at the cooldown speed' + fan +
+      ' until ET falls below the cooldown end' + (recording() ? ', and recording ends.' : '.');
+  }
+
+  function stopRoast() {
+    if (!R.stopAvailable(recording(), S.data, S.recipe)) return;
+    confirmThen('Stop the roast? ' + stopEffects(), () => {
       if (S.link !== 'open') {
         logReply('err', 'STOP not sent: not connected. The board keeps its current heater and mode.');
         return;
@@ -391,12 +396,31 @@
     });
   }
 
+  // End roast and Drop end the roast as STOP does (docs/design.md, "End of roast").
+  // Without a link the recording still ends; the board is not changed.
+  function finishRoast(question, okLabel) {
+    if (!recording()) return;
+    confirmThen(question + ' ' + stopEffects(), () => {
+      if (S.link === 'open') {
+        send({ command: 'stop' }); // End roast and Drop end the roast as STOP does
+        expectStop();
+      } else {
+        logReply('err', 'STOP not sent: not connected. The board keeps its current heater and mode.');
+      }
+      endRoast();
+      offerRoastSave();
+    }, okLabel);
+  }
+
   function renderEvents() {
     const box = $('#event-buttons');
     if (!box.children.length) {
       for (const ev of R.EVENTS) {
         const b = el('button', { type: 'button', 'data-code': ev.code, class: ev.code.toLowerCase() }, ev.label);
-        b.addEventListener('click', () => markEvent(ev.code));
+        b.addEventListener('click', () => {
+          markEvent(ev.code);
+          if (ev.code === 'DROP' && eventOf('DROP')) finishRoast('Drop marked. End the roast now?', 'End roast');
+        });
         box.append(b);
       }
     }
@@ -1031,9 +1055,12 @@
       : S.rec.state !== 'ready' ? 'The board has no roast storage' : 'Save the last roast on the board';
   }
 
-  // After STOP, and when the cooldown ends with the roast still unsaved.
+  // Once per roast: at Drop or End roast, else after STOP or when the cooldown ends.
   function offerRoastSave() {
-    if (S.rec.state === 'ready' && sessionSavable() && !$('#roast-dialog').open) openRoastSave();
+    if (S.session.saveOffered || S.rec.state !== 'ready' || !sessionSavable() || $('#roast-dialog').open) return;
+    S.session.saveOffered = true;
+    saveSession(true);
+    openRoastSave();
   }
   function watchCooldown(d) {
     const was = S.cooling;
@@ -2360,9 +2387,7 @@
     initAppearance();
     window.addEventListener('hashchange', () => setTab(location.hash.slice(1)));
     $('#stop').addEventListener('click', stopRoast);
-    const askEnd = () => {
-      if (recording()) confirmThen('End the roast? Recording stops; the board is not changed. The samples stay until the next Start.', endRoast);
-    };
+    const askEnd = () => finishRoast('End the roast?', 'End roast');
     $('#end-roast').addEventListener('click', askEnd);
     $('#end-after-drop').addEventListener('click', askEnd);
 

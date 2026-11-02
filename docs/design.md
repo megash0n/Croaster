@@ -1759,3 +1759,31 @@ turn-on temperature. Wiring: docs/wiring.md.
   `boxWarn`); page ids `tile-box`, `aux-row`, `scroll-fan`, `aux-fan1`,
   `aux-fan2`; NVS namespace `aux` (`f1On`, `f2On`, `boxW`).
 
+### D35. End of roast — new 2026-11-02, open for Shawn
+Shawn: Roast End acts like STOP, Drop ends heating, the setpoint resets, and
+the save offer opens once, at the end.
+
+- **End roast** (header button, and the one shown after Drop) asks the same
+  question as STOP, then sends `stop`: heater off, recipe aborted, Manual,
+  cooldown fan (the scroll fan follows the cooldown). Recording ends. With
+  no link the recording still ends and the log says STOP was not sent.
+- **Drop** (judgement call). In the Behmor the beans cool in the drum, so
+  Drop is the end of heating. Drop is marked at once, so its time is exact,
+  and then the End roast confirmation opens. Cancel keeps heating and
+  recording with Drop marked (Undo last event removes it). It asks instead
+  of stopping straight away, so one stray click cannot end a roast.
+- **Setpoint.** `stop` sets the setpoint to 0, so a later switch to PID
+  starts with the heater off. A recipe Cool step and the safety trips are
+  unchanged.
+- **Save offer.** At most once per roast (session `saveOffered`): at Drop or
+  End roast, else after STOP, else when the cooldown ends. It is not shown
+  when the board has no roast storage, so the fallbacks remain.
+- **STOP afterwards.** Once the cooldown ends, the board is in Manual with
+  the heater off and setpoint 0, so STOP is disabled again (batch B rules).
+
+### D36. Mains trip setting — new 2026-11-02, open for Shawn
+Controls > Safety > Mains trip turns the `nomains` trip on or off; saved in
+NVS (`control`/`mainsOn`), shown only on AC dimmer builds (`getControl`
+`mainsTrip` is absent otherwise). `CPID_REQUIRE_MAINS` is now the default
+of that setting and follows `CPID_FAN` (on for the dimmer). Turning it off
+asks for a danger confirmation.

@@ -151,8 +151,12 @@ device settings (unit, corrections) and maintenance.
    them.
 5. **Stop.** STOP in the top bar asks for confirmation, then turns the
    heater off, switches the board to Manual (ending PID, a profile, a recipe
-   or autotune), sets the cooldown fan and ends the recording. After Drop,
-   End roast stops the recording without changing the board.
+   or autotune), sets the setpoint off, sets the cooldown fan and ends the
+   recording. End roast asks the same way and does the same.
+   Drop is the end of heating: it marks Drop, then asks whether to end the
+   roast now (Cancel keeps heating; Drop stays marked). The save dialog
+   opens once per roast: at Drop or End roast, else after STOP or when the
+   cooldown ends.
 6. **Keep or clear.** Download CSV saves the samples and events. Clear roast
    deletes the last roast from this browser after asking; the board is not
    changed.

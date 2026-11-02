@@ -283,6 +283,7 @@ void Controller::apply(const Command& c) {
         manualHeater_ = 0;
         setMode(Mode::Manual, pv, "stop");
         manualHeater_ = 0;
+        st_.setpoint = 0; // the setpoint does not carry over into the next roast
         if (c.b == 1) {
             assist_.reset();
             setBaseFan(c.a);

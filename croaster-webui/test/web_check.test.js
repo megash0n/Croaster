@@ -118,6 +118,7 @@ test('the page sends commands only from user actions', () => {
   assert.deepEqual(calls, [
     "send({ command: 'recipeStart' });",
     "send({ command: 'stop' });",
+    "send({ command: 'stop' }); // End roast and Drop end the roast as STOP does",
     'send({ command: { auxFans: values } });',
     'send({ command: { [key]: value } }); // one command per click',
     'send({ command: { profile: steps } });',
