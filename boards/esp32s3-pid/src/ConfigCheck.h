@@ -57,7 +57,8 @@ constexpr int kPins[] = {
 #endif
 #if CMON_DISPLAY != CMON_DISPLAY_NONE
     CMON_PIN_I2C_SDA,    CMON_PIN_I2C_SCL,
-#endif#if CPID_SCROLL_FAN
+#endif
+#if CPID_SCROLL_FAN
     CPID_PIN_SCROLL_FAN,
 #endif
 #if CPID_FAN1
