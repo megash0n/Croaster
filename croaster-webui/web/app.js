@@ -81,6 +81,7 @@
     recipeCharge: (loadJson(KEY_RECIPE) || {}).charge || '', // charge temperature as typed, page unit
     recipeAt: 0, // Date.now() of the last getRecipe reply (ramp elapsed is as of then)
     rampWarn: [], // [{i, k, node}] ramp feasibility notes in the recipe editor
+    atTrace: null, // autotune run on the Live chart, in memory only (traceAutotune)
     recipe: null, recipeSeq: null, // the board's getRecipe reply and the data "recipe.seq" it matches
     behind: { state: null, warn: false, lagC: NaN },
     rec: { state: 'unknown', list: [], askedAt: 0, used: null, total: null, max: null, getIntent: {} }, // saved roasts
@@ -133,13 +134,15 @@
     const ss = S.session.samples;
     return ss.length ? ss[ss.length - 1] : null;
   }
-  function rorAt(i) {
-    const s = S.session.samples[i];
+  function rorAt(i, ss = S.session.samples) {
+    const s = ss[i];
     if (!s) return null;
     if (!S.rorSmooth) return isNum(s.dbt) ? s.dbt : null;
-    if (s.sr === undefined) s.sr = R.smoothedRor(S.session.samples, i, 'bt', 30);
+    if (s.sr === undefined) s.sr = R.smoothedRor(ss, i, 'bt', 30);
     return s.sr;
   }
+  // The Live chart shows the autotune run while it goes and no roast records; else the roast.
+  const chartSession = () => (S.atTrace && !recording() ? S.atTrace : S.session);
   function el(tag, attrs, text) {
     const e = document.createElement(tag);
     for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
@@ -191,7 +194,7 @@
       checkStop(msg.data);
       watchCooldown(msg.data);
       if (S.info.controls) watchRecipe(msg.data);
-      if (polled) addSample(msg.data, at);
+      if (polled) { addSample(msg.data, at); traceAutotune(msg.data, at); }
       S.dirty = true;
       return;
     }
@@ -307,6 +310,22 @@
       if (tp) addEvent({ code: 'TP', t: tp.t, bt: tp.bt, auto: true });
     }
     saveSession(false);
+  }
+
+  // Autotune on the Live chart: kept in memory only while the board is in Tuning; not
+  // recorded, saved or stored. Same sample fields as a roast (BT, ET, RoR, heater, fan, test point).
+  function traceAutotune(d, at) {
+    if (d.Mode !== 'Tuning') { S.atTrace = null; return; }
+    if (!S.atTrace) S.atTrace = { startedAt: at, samples: [], events: [] };
+    const ss = S.atTrace.samples;
+    ss.push({
+      t: Math.round((at - S.atTrace.startedAt) / 100) / 10,
+      bt: isNum(d.BT) ? d.BT : null, et: isNum(d.ET) ? d.ET : null,
+      dbt: isNum(d.DBT) ? d.DBT : null, det: isNum(d.DET) ? d.DET : null,
+      h: isNum(d.BurnerVal) ? d.BurnerVal : null, f: isNum(d.FanVal) ? d.FanVal : null,
+      sv: null, at: isNum(d.atTarget) ? d.atTarget : null,
+    });
+    if (ss.length > MAX_SAMPLES) ss.shift();
   }
 
   function addEvent(ev) {
@@ -651,15 +670,17 @@
     const svg = $('#chart');
     const W = svg.clientWidth, H = svg.clientHeight;
     if (!W || !H) return;
-    const ss = S.session.samples;
-    const charge = chargeT();
+    const ses = chartSession();
+    const tuning = ses !== S.session;
+    const ss = ses.samples;
+    const charge = tuning ? null : chargeT();
     const M = { l: 46, r: 46, t: 20, b: 22 };
     const t0 = charge !== null ? charge : (ss.length ? ss[0].t : 0);
     let xMin = ss.length ? ss[0].t - t0 : 0;
     if (charge !== null) xMin = Math.max(xMin, -180); // keep at most 3 min of preheat in view
     const xLast = ss.length ? ss[ss.length - 1].t - t0 : 0;
-    const plan = setpointPlan();
-    const ref = refCurve();
+    const plan = tuning ? [] : setpointPlan();
+    const ref = tuning ? null : refCurve();
     const refEnd = ref ? Math.max(ref.points.length ? ref.points[ref.points.length - 1].t : 0, ...ref.events.map((e) => e.t)) : 0;
     const xMax = Math.max(xLast, xMin + (charge !== null ? 720 : 300), plan.length ? plan[plan.length - 1].t - t0 : 0, refEnd);
     const xTicks = R.niceTicks(xMin / 60, xMax / 60, Math.max(3, Math.floor(W / 90)));
@@ -676,7 +697,7 @@
     if (ref) for (const p of ref.points) if (p.t >= xMin) { tLo = Math.min(tLo, p.v); tHi = Math.max(tHi, p.v); }
     const first = ss.length - vis.length;
     for (let i = first; i < ss.length; i++) {
-      const r = rorAt(i);
+      const r = rorAt(i, ss);
       if (isNum(r)) { rLo = Math.min(rLo, Math.max(r, -20)); rHi = Math.max(rHi, Math.min(r, 120)); }
     }
     const yT = R.niceTicks(tLo, tHi, Math.max(3, Math.floor(H / 60)));
@@ -739,13 +760,13 @@
     line('at-target', (i) => ss[i].at, yt);
     line('et', (i) => ss[i].et, yt);
     line('bt', (i) => ss[i].bt, yt);
-    line('ror', rorAt, yr);
+    line('ror', (i) => rorAt(i, ss), yr);
     if (!S.rorSmooth) line('ror-et', (i) => ss[i].det, yr);
     $('#key-ror-et').hidden = S.rorSmooth;
 
     // Labels of events close together go on the next row down instead of overlapping.
     const rowEnd = [];
-    for (const e of S.session.events.slice().sort((a, b) => a.t - b.t)) {
+    for (const e of ses.events.slice().sort((a, b) => a.t - b.t)) {
       const px = x(e.t);
       if (px < M.l) continue;
       const g = svgEl('g', { class: 'event' });
@@ -764,16 +785,20 @@
       const px = x(S.cursorT);
       svg.append(svgEl('line', { class: 'cursor', x1: px, x2: px, y1: M.t, y2: H - M.b }));
     }
-    renderStrips(x, W, M, first);
+    if (tuning) {
+      const tx = svgEl('text', { x: M.l + 6, y: M.t + 12 });
+      tx.textContent = 'Autotune' + (S.data && S.data.autotune ? ': ' + S.data.autotune : '') + ' (not recorded)';
+      svg.append(tx);
+    }
+    renderStrips(x, W, M, first, ss);
     S.chartX = { x, t0, W, M, xMin, xMax };
   }
 
-  function renderStrips(x, W, M, first) {
+  function renderStrips(x, W, M, first, ss) {
     const svg = $('#strips');
     if (svg.hidden) return;
     const H = svg.clientHeight;
     if (!H) return;
-    const ss = S.session.samples;
     svg.textContent = '';
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     const y = (v) => H - 4 - Math.max(0, Math.min(100, v)) / 100 * (H - 8);
@@ -800,7 +825,7 @@
 
   function onChartPointer(ev) {
     const c = S.chartX;
-    const ss = S.session.samples;
+    const ss = chartSession().samples;
     if (!c || !ss.length) return;
     const rect = $('#chart').getBoundingClientRect();
     const px = ev.clientX - rect.left;
@@ -809,7 +834,7 @@
     for (let i = 0; i < ss.length; i++) if (Math.abs(ss[i].t - t) < Math.abs(ss[best].t - t)) best = i;
     const s = ss[best];
     S.cursorT = s.t;
-    const parts = [R.formatClock(s.t - c.t0), 'BT ' + fmt(s.bt), 'ET ' + fmt(s.et), 'RoR ' + fmt(rorAt(best))];
+    const parts = [R.formatClock(s.t - c.t0), 'BT ' + fmt(s.bt), 'ET ' + fmt(s.et), 'RoR ' + fmt(rorAt(best, ss))];
     if (isNum(s.h)) parts.push('heater ' + s.h + '%');
     if (isNum(s.f)) parts.push('fan ' + s.f + '%');
     if (isNum(s.sv)) parts.push('SV ' + fmt(s.sv));

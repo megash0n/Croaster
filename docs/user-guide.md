@@ -195,8 +195,11 @@ kept at 350 °F because the Behmor's own cutoff is bypassed.
 
 Controls > Autotune > Start autotune opens a dialog with the estimated time
 and the Fan test checkbox. Start begins the run. The panel shows progress,
-the steps, time left and a log line per cycle. Start a recording on Live to
-see BT against the dashed test-point line.
+the steps, time left and a log line per cycle. While it runs, the Live
+chart plots BT, ET, RoR, heater and fan against the dashed test-point line,
+labelled with the current point and cycle. That plot is not recorded or
+saved and clears when the run ends. A roast recording, when one is running,
+takes the chart instead.
 
 Note the highest BT at each point. The run stops itself if BT passes a point
 by 54 °F (30 °C): above 304, 354 or 404 °F (151, 179 or 207 °C).
