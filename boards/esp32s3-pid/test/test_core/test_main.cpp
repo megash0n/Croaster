@@ -141,6 +141,17 @@ void test_time_proportional_window() {
     TEST_ASSERT_EQUAL_INT(1000, on);
 }
 
+// The fan floor needs an SSR pulse, not just a non-zero PID output.
+void test_time_proportional_delivers() {
+    TimeProportional tp(1000, 20);
+    TEST_ASSERT_FALSE(tp.delivers(0));
+    TEST_ASSERT_FALSE(tp.delivers(1.5f)); // 15 ms < 20 ms minimum pulse
+    TEST_ASSERT_TRUE(tp.delivers(2));
+    TEST_ASSERT_TRUE(tp.delivers(150)); // clamped to 100
+    TEST_ASSERT_FALSE(tp.delivers(NAN));
+    TEST_ASSERT_EQUAL_UINT32(1000, tp.onMsFor(99)); // 990 ms leaves < 20 ms off: full window
+}
+
 // ---------- PID ----------
 void test_pid_integrator_does_not_wind_up() {
     Pid::Config c;
@@ -1473,6 +1484,7 @@ int main() {
     RUN_TEST(test_probe_channels_independent_faults);
     RUN_TEST(test_max6675_decode);
     RUN_TEST(test_time_proportional_window);
+    RUN_TEST(test_time_proportional_delivers);
     RUN_TEST(test_pid_integrator_does_not_wind_up);
     RUN_TEST(test_pid_bumpless_reset);
     RUN_TEST(test_leaving_autotune_starts_from_zero);

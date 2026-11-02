@@ -20,6 +20,10 @@ public:
     float requested() const {
         return req_;
     }
+    // True when this request would switch the element on (see TimeProportional::delivers).
+    bool heats(float percent) const {
+        return percent > 0 && tp_.delivers((percent > 100 ? 100 : percent) * maxPct_ / 100.0f);
+    }
     void tick(uint32_t nowMs);
     void off() {
         set(0);

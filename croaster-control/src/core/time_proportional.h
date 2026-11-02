@@ -21,6 +21,23 @@ public:
     float duty() const {
         return pending_;
     }
+    // On-time per window for a duty, after the minimum-pulse rule.
+    uint32_t onMsFor(float percent) const {
+        if (!(percent > 0))
+            return 0;
+        if (percent > 100)
+            percent = 100;
+        uint32_t on = static_cast<uint32_t>(percent * windowMs_ / 100.0f + 0.5f);
+        if (on < minPulseMs_)
+            on = 0;
+        if (windowMs_ - on < minPulseMs_)
+            on = windowMs_;
+        return on;
+    }
+    // True when the duty switches the SSR on at all (a pulse survives the minimum).
+    bool delivers(float percent) const {
+        return onMsFor(percent) > 0;
+    }
 
     // Call at least every few ms. Returns the desired output state.
     bool isOn(uint32_t nowMs) {
@@ -28,12 +45,7 @@ public:
             // resync if we fell more than one window behind
             windowStart_ = (started_ && nowMs - windowStart_ < 2 * windowMs_) ? windowStart_ + windowMs_ : nowMs;
             started_ = true;
-            uint32_t on = static_cast<uint32_t>(pending_ * windowMs_ / 100.0f + 0.5f);
-            if (on < minPulseMs_)
-                on = 0;
-            if (windowMs_ - on < minPulseMs_)
-                on = windowMs_;
-            onMs_ = on;
+            onMs_ = onMsFor(pending_);
         }
         return (nowMs - windowStart_) < onMs_;
     }

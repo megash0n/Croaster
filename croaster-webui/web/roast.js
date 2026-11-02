@@ -151,7 +151,11 @@
   function stopAvailable(recording, data, recipe) {
     if (recording) return true;
     if (recipe && recipe.state === 'running') return true;
-    return !!data && (data.BurnerVal > 0 || (!!data.Mode && data.Mode !== 'Manual'));
+    if (!data) return false;
+    // Something runs: heater on, autotune or a profile, a PID hold with a setpoint, or the cooldown.
+    // Manual or PID at setpoint 0 with the heater off is idle.
+    return data.BurnerVal > 0 || data.Mode === 'Tuning' || data.Mode === 'Profile' ||
+      (data.Mode === 'PID' && data.SV > 0) || data.cooling === true;
   }
 
   // The board has acted on "stop": Manual mode with the heater at 0 %.

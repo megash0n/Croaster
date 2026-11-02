@@ -334,6 +334,8 @@ void Controller::controlStep(uint32_t now) {
     case Mode::Pid:
         spSlope_.update(st_.setpoint, pidCfg().dtSeconds); // a recipe ramp moves the setpoint
         out = pid_.update(st_.setpoint, pv, feedforward(st_.setpoint));
+        if (!(st_.setpoint > 0))
+            out = 0; // setpoint 0 = heater off (an idle switch to PID does not heat)
         break;
     case Mode::Profile: {
         st_.profileElapsedS = (now - profileStartMs_) / 1000.0f;
@@ -436,7 +438,9 @@ void Controller::controlStep(uint32_t now) {
             setMode(Mode::Manual, pv, tripName(st_.trip));
         manualHeater_ = 0;
     }
-    if (out > 0 && fan_.get() < lim_.minFanWithHeat) {
+    // Fan floor only while the element actually switches on: a PID output below
+    // one SSR pulse (idle PID near or above the setpoint) leaves the fan alone.
+    if (heater_.heats(out) && fan_.get() < lim_.minFanWithHeat) {
         fan_.set(lim_.minFanWithHeat);
         if (!std::isfinite(testFan))
             fanBase_ = fmaxf(fanBase_, lim_.minFanWithHeat);
