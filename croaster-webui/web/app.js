@@ -1037,7 +1037,7 @@
     fillBeanSelect(roast.bean || '');
     dlg.dataset.for = '';
     showLoss();
-    $('#rs-info').textContent = '';
+    $('#rs-info').textContent = roast.recipe ? 'Recipe: ' + roast.recipe : '';
     dlg.returnValue = '';
     dlg.onclose = () => {
       if (dlg.returnValue !== 'ok') return;
@@ -1103,7 +1103,7 @@
     const bean = beanChoice();
     S.lastBean = bean.bean || '';
     const rec = RC.buildRoast(S.session, Object.assign({ name, dateS: S.session.startedAt / 1000, greenG: num('#rs-green'),
-      roastedG: num('#rs-roasted'), notes: $('#rs-notes').value.trim() }, bean));
+      roastedG: num('#rs-roasted'), notes: $('#rs-notes').value.trim(), recipe: S.session.recipe }, bean));
     S.rec.pendingFor = S.session.startedAt;
     send({ command: 'roastSave', roast: rec }, true);
     logReply('out', '→ roastSave "' + name + '" (' + rec.bt.length + ' points every ' + rec.dt + ' s)');
@@ -1184,7 +1184,9 @@
     for (const m of shown) {
       const tr = el('tr');
       tr.append(el('td', {}, m.date ? new Date(m.date * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—'));
-      tr.append(el('td', {}, m.name + (m.valid ? '' : ' (not valid)')));
+      const nameTd = el('td', {}, m.name + (m.valid ? '' : ' (not valid)'));
+      if (m.recipe) nameTd.append(el('div', { class: 'muted small' }, 'Recipe: ' + m.recipe));
+      tr.append(nameTd);
       tr.append(el('td', {}, m.beanName || '—'));
       const loss = RC.lossPct(m.greenG, m.roastedG);
       tr.append(el('td', {}, (isNum(m.greenG) ? m.greenG + ' g' : '—') + (isNum(m.roastedG) ? ' → ' + m.roastedG + ' g' : '') +
@@ -1896,6 +1898,8 @@
     if (cmd === 'getRecipe') {
       S.recipe = r;
       S.recipeAt = Date.now();
+      // A recipe that runs while a roast records is saved with it (roast record "recipe").
+      if (recording() && r && r.state === 'running' && r.name) S.session.recipe = r.name;
     } else if (cmd === 'recipeLoad') {
       if (r.ok) recipeStatus('Loaded on the board' + (r.schedule ? ', with its schedule' : '') + '. Run recipe starts it.');
       else recipeStatus('Not loaded: ' + (r.reason || P.message(r.error)) + '.', true);

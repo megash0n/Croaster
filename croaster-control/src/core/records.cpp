@@ -69,7 +69,7 @@ bool series(JsonVariantConst v, size_t max, size_t& count) {
     return true;
 }
 
-const char* const kRoastSummary[] = {"date", "unit", "bean", "beanName", "greenG", "roastedG", "events"};
+const char* const kRoastSummary[] = {"date", "unit", "bean", "beanName", "recipe", "greenG", "roastedG", "events"};
 const char* const kBeanSummary[] = {"origin", "process", "region", "varietal", "blend", "favourite", "score", "stockG"};
 
 constexpr size_t kMaxField = 60; // region, varietal, farm, flavour, origin, process
@@ -89,6 +89,8 @@ const char* checkRoast(JsonObjectConst r) {
         return "unit must be C, F or K";
     if (!optionalText(r["bean"], proflib::kMaxIdLen) || !optionalText(r["beanName"], proflib::kMaxNameChars))
         return "bean must be an id and a name";
+    if (!optionalText(r["recipe"], proflib::kMaxNameChars))
+        return "recipe must be a name up to 40 characters";
     if (!optionalNumber(r["greenG"], 0, 100000) || !optionalNumber(r["roastedG"], 0, 100000))
         return "weights must be grams, 0..100000";
     if (!optionalText(r["notes"], proflib::kMaxNotesChars))

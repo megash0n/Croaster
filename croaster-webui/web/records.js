@@ -40,7 +40,7 @@
   }
 
   // A roast record from a session ({unit, samples:[{t,bt,et}], events:[{code,t,bt}]}).
-  // `o`: {name, dateS, bean, beanName, greenG, roastedG, notes}. The curve is
+  // `o`: {name, dateS, bean, beanName, recipe, greenG, roastedG, notes}. The curve is
   // resampled every dt seconds from CHARGE (from the first sample without
   // one); dt grows until the record fits MAX_POINTS and MAX_BYTES.
   function buildRoast(session, o) {
@@ -51,6 +51,7 @@
       version: VERSION, name: String(o.name || '').trim(), date: Math.round(o.dateS), unit: session.unit || 'C',
     };
     if (o.bean) { base.bean = o.bean; if (o.beanName) base.beanName = o.beanName; }
+    if (o.recipe) base.recipe = Array.from(String(o.recipe)).slice(0, 40).join(''); // board limit: 40 characters
     if (isNum(o.greenG)) base.greenG = r1(o.greenG);
     if (isNum(o.roastedG)) base.roastedG = r1(o.roastedG);
     if (o.notes) base.notes = String(o.notes);
@@ -100,7 +101,7 @@
   function roastCsv(rec) {
     const u = rec.unit || '';
     const head = [['name', rec.name], ['date', new Date(rec.date * 1000).toISOString()], ['bean', rec.beanName || ''],
-      ['green_g', rec.greenG], ['roasted_g', rec.roastedG], ['loss_pct', lossPct(rec.greenG, rec.roastedG)],
+      ['recipe', rec.recipe || ''], ['green_g', rec.greenG], ['roasted_g', rec.roastedG], ['loss_pct', lossPct(rec.greenG, rec.roastedG)],
       ['notes', rec.notes || '']].map((r) => r.map(csvCell).join(','));
     const events = (rec.events || []).slice().sort((a, b) => a.t - b.t);
     let next = 0;

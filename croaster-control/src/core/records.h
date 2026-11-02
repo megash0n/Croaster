@@ -12,7 +12,8 @@
 //   "date" is Unix seconds from the page's clock. The curve has a point every
 //   "dt" seconds from "start", in seconds from CHARGE (from the first sample
 //   when there was no CHARGE); null where a probe had no reading. "bean" (an
-//   id), "beanName", the weights in grams and "notes" are optional.
+//   id), "beanName", "recipe" (the recipe that ran, by name), the weights in
+//   grams and "notes" are optional.
 //
 // Bean record v1 (directory "/beans", up to kMaxBeans; a full store refuses):
 //   {"version":1,"name":"Nyeri AA","origin":"Kenya","process":"washed",

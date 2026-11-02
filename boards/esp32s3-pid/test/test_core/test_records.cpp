@@ -66,13 +66,15 @@ void test_roast_record_checks() {
     TEST_ASSERT_TRUE(s.begin());
     records::Saved out;
     const char* why = nullptr;
-    TEST_ASSERT_EQUAL(records::Error::None, save(s, roast("Kenya", 1000, R"(,"greenG":250,"roastedG":212)"), out));
+    TEST_ASSERT_EQUAL(records::Error::None, save(s, roast("Kenya", 1000, R"(,"greenG":250,"roastedG":212,"recipe":"City+")"), out));
     TEST_ASSERT_EQUAL_STRING("kenya", out.id.c_str());
     TEST_ASSERT_TRUE(out.created);
     TEST_ASSERT_EQUAL(records::Error::BadName, save(s, roast("", 1000), out));
     TEST_ASSERT_EQUAL(records::Error::BadRequest, save(s, roast("x", 0), out, "", &why));
     TEST_ASSERT_EQUAL_STRING("date must be Unix seconds", why);
     TEST_ASSERT_EQUAL(records::Error::BadRequest, save(s, roast("x", 5, R"(,"greenG":-1)"), out, "", &why));
+    TEST_ASSERT_EQUAL(records::Error::BadRequest, save(s, roast("x", 5, R"(,"recipe":7)"), out, "", &why));
+    TEST_ASSERT_EQUAL_STRING("recipe must be a name up to 40 characters", why);
     TEST_ASSERT_EQUAL(records::Error::NewerVersion,
                       save(s, R"({"version":2,"name":"x","date":5,"unit":"F","start":0,"dt":1,"bt":[]})", out));
     TEST_ASSERT_EQUAL(records::Error::BadRequest,
@@ -84,6 +86,7 @@ void test_roast_record_checks() {
     JsonDocument m;
     deserializeJson(m, s.list()[0].summary);
     TEST_ASSERT_EQUAL(250, m["greenG"].as<int>());
+    TEST_ASSERT_EQUAL_STRING("City+", m["recipe"]);
     TEST_ASSERT_EQUAL_STRING("CHARGE", m["events"][0]["code"]);
     TEST_ASSERT_TRUE(m["events"][0]["bt"].isNull());
     TEST_ASSERT_TRUE(m["bt"].isNull());

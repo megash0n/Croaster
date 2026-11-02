@@ -23,6 +23,13 @@ test('buildRoast: times from CHARGE, weights and bean kept, readings to 0.1', ()
   assert.deepStrictEqual(r.events[0], { code: 'CHARGE', t: 0, bt: 215 });
   assert.strictEqual(RC.duration(r), 570);
   assert.ok(JSON.stringify(r).length <= RC.MAX_BYTES);
+  assert.strictEqual(r.recipe, undefined);
+});
+
+test('buildRoast: the recipe that ran is kept by name, cut to 40 characters', () => {
+  assert.strictEqual(RC.buildRoast(session(10, 1), { name: 'x', dateS: 1, recipe: 'City+' }).recipe, 'City+');
+  assert.strictEqual(RC.buildRoast(session(10, 1), { name: 'x', dateS: 1, recipe: 'é'.repeat(50) }).recipe, 'é'.repeat(40));
+  assert.match(RC.roastCsv(RC.buildRoast(session(10, 1), { name: 'x', dateS: 1, recipe: 'City+' })), /\nrecipe,City\+\n/);
 });
 
 test('buildRoast: long or dense roasts are thinned to fit the board', () => {
