@@ -58,6 +58,14 @@ static void test_scroll_fan_follows_cooldown() {
     TEST_ASSERT_FALSE(s.update(Mode::Manual, 0, false)); // cooldown ended
 }
 
+static void test_scroll_fan_disabled_stays_off() {
+    ScrollFan s;
+    TEST_ASSERT_FALSE(s.update(Mode::Manual, 0, true, false)); // enabled off: no cooldown run
+    TEST_ASSERT_FALSE(s.on());
+    TEST_ASSERT_TRUE(s.update(Mode::Manual, 0, true, true)); // re-enabled during cooldown
+    TEST_ASSERT_TRUE(s.on());
+}
+
 static void test_scroll_fan_manual_only_when_idle() {
     ScrollFan s;
     TEST_ASSERT_FALSE(s.setManual(true, Mode::Pid, 0, false));
@@ -80,5 +88,6 @@ void runAuxFanTests() {
     RUN_TEST(test_box_temperature_falls_back_to_chip);
     RUN_TEST(test_thermo_fan_hysteresis_and_override);
     RUN_TEST(test_scroll_fan_follows_cooldown);
+    RUN_TEST(test_scroll_fan_disabled_stays_off);
     RUN_TEST(test_scroll_fan_manual_only_when_idle);
 }

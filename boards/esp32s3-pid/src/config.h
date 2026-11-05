@@ -73,8 +73,8 @@
 
 // ---- Optional fans (docs/wiring.md) -----------------------------------------
 // 0 = not fitted. platformio.ini can set them with -D (e.g. -D CPID_FAN1=1).
-// Scroll fan: AC fan on a relay module (HIGH = on); runs during the cooldown,
-// and on/off from the Live page in Manual mode when idle.
+// Cooling Fan (scroll): AC fan on a relay module (HIGH = on); runs during the
+// cooldown (STOP, End roast, trips); on/off from Live when idle. Never in preheat.
 #ifndef CPID_SCROLL_FAN
 #    define CPID_SCROLL_FAN 0
 #endif

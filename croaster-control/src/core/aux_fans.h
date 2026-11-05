@@ -82,10 +82,11 @@ private:
     bool on_ = false;
 };
 
-// Scroll fan: runs while the cooldown runs (stop, emergency off and safety trips
-// all start one) and stops when it ends. Off at boot. A manual request is taken
-// only when idle, and ends when the heater comes on, the mode leaves Manual or a
-// cooldown starts.
+// Cooling Fan (scroll relay): runs while the cooldown runs (stop, End roast,
+// emergency off and every safety trip start one) and stops when ET ends the
+// cooldown. Never during preheat. Off at boot. A manual request is taken only
+// when idle, and ends when the heater comes on, the mode leaves Manual or a
+// cooldown starts. `enabled` false (saved setting) keeps the output off.
 class ScrollFan {
 public:
     static bool idle(Mode m, float heaterPct, bool cooling) {
@@ -98,7 +99,13 @@ public:
         manual_ = on;
         return true;
     }
-    bool update(Mode m, float heaterPct, bool cooling) {
+    bool update(Mode m, float heaterPct, bool cooling, bool enabled = true) {
+        if (!enabled) {
+            manual_ = false;
+            cooling_ = cooling;
+            on_ = false;
+            return false;
+        }
         if ((cooling && !cooling_) || m != Mode::Manual || heaterPct > 0)
             manual_ = false;
         cooling_ = cooling;

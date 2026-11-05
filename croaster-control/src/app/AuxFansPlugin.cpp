@@ -58,6 +58,7 @@ void AuxFansPlugin::begin() {
         cfg_.fan1OnC = p.getFloat("f1On", cfg_.fan1OnC);
         cfg_.fan2OnC = p.getFloat("f2On", cfg_.fan2OnC);
         cfg_.boxWarnC = p.getFloat("boxW", cfg_.boxWarnC);
+        scrollEnabled_ = p.getBool("scrEn", true);
         p.end();
     }
 }
@@ -77,7 +78,7 @@ void AuxFansPlugin::loop() {
     const Snapshot s = controller_.snapshot();
     chipC_ = temperatureRead();
     box_ = auxfans::boxTemperature(s.box, chipC_);
-    const bool scroll = scroll_.update(s.mode, s.heaterPct, s.cooling);
+    const bool scroll = scroll_.update(s.mode, s.heaterPct, s.cooling, scrollEnabled_);
     if (cfg_.scrollPin >= 0)
         digitalWrite(cfg_.scrollPin, scroll ? HIGH : LOW);
     if (cfg_.fan1Pin >= 0)
@@ -92,10 +93,24 @@ String AuxFansPlugin::handle(const JsonObject& json) {
         return "";
     const char u = unit();
     const char* error = nullptr;
+    if (a["scrollEn"].is<bool>()) {
+        if (cfg_.scrollPin < 0)
+            error = "no cooling fan";
+        else if (a["scrollEn"].as<bool>() != scrollEnabled_) {
+            scrollEnabled_ = a["scrollEn"].as<bool>();
+            Preferences p;
+            if (p.begin(kNs, false)) {
+                p.putBool("scrEn", scrollEnabled_);
+                p.end();
+            }
+        }
+    }
     if (a["scroll"].is<bool>()) {
         const Snapshot s = controller_.snapshot();
         if (cfg_.scrollPin < 0)
-            error = "no scroll fan";
+            error = "no cooling fan";
+        else if (!scrollEnabled_)
+            error = "cooling fan off";
         else if (!scroll_.setManual(a["scroll"].as<bool>(), s.mode, s.heaterPct, s.cooling))
             error = "not idle";
     }
@@ -141,8 +156,10 @@ void AuxFansPlugin::writeData(JsonObject& data) {
     if (std::isfinite(chipC_))
         a["chip"] = rounded(fromCelsius(chipC_, u));
     a["warn"] = rounded(fromCelsius(cfg_.boxWarnC, u));
-    if (cfg_.scrollPin >= 0)
+    if (cfg_.scrollPin >= 0) {
+        a["scrollEn"] = scrollEnabled_;
         a["scroll"] = scroll_.on();
+    }
     struct {
         const char* key;
         int pin;
