@@ -236,6 +236,9 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `library.json`).
 
 ## Next steps
+- Flash D37 build and confirm Cooling Fan / Exhaust Fan labels, Cooling Fan
+  enable, and Drop-as-Cooldown on the Live page (build flags already on in
+  `boards/esp32s3-pid/platformio.ini`).
 - Croaster PID: hardware bring-up and the rest of `docs/tickets.md` (T2–T14).
 - Update the ICRM app's `lib_deps` for the `croaster/` subfolder.
 - Flash + verify the esp32s3 build on real hardware (touch, chart swipe,
@@ -257,6 +260,9 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `croaster/library.json`. Adding `yuriisalimov/MAX6675_Thermocouple` to a
   board's `lib_deps` installs a second copy and the link fails with multiple
   definitions.
+- `ControlPlugin::onData` chains writers. A second `onData` used to replace
+  the first, so `RecipePlugin::attach` dropped `AuxFansPlugin::writeData` and
+  the Live page never saw Cooling Fan / FAN1 / FAN2 (D37).
 - `onJsonCommand(key, fn)`: every registered callback gets the **whole**
   `command` object when its key is present; parse only your own key.
 - Croaster's handler ignores messages without a `"command"` member, so

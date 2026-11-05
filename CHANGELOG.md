@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] — Croaster PID control board (branch rework/roaster)
 
 ### Added
+- **Cooling Fan enable (D37).** Controls > Safety can turn the Cooling Fan
+  (scroll relay) off; saved on the board, default on. Hidden when
+  `CPID_SCROLL_FAN` is off.
+- **Drop event as Cooldown (D37).** Controls > Safety can show the Drop
+  button and labels as "Cooldown" for drum-cool setups; logic unchanged,
+  default remains Drop.
 - **End of roast (D35).** End roast asks as STOP does and ends the roast
   the same way: heater off, recipe aborted, Manual, cooldown fan, recording
   ends. Drop marks the event, then offers to end the roast. The save dialog
@@ -16,6 +22,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Mains trip setting (D36).** Controls > Safety turns the `nomains` trip
   on or off (AC dimmer builds; on by default; saved on the board). Turning
   it off needs a danger confirmation.
+
+### Changed
+- **Exhaust Fan / Cooling Fan names (D37).** The main roast fan is labelled
+  Exhaust Fan in the page (tiles, controls, confirmations, logs). The scroll
+  relay is Cooling Fan. It runs on STOP, End roast, every safety trip and
+  cooldown, never in preheat, and stops with the Exhaust Fan when ET ends
+  the cooldown.
+- **Recipe Live log times (D37).** Time triggers no longer read doubled
+  (`0:10:10`); they show `0:10`. Ramp shape "front" reads as "front curve".
+- **Aux fans on the Live page (D37).** `ControlPlugin::onData` chains
+  writers, so AuxFansPlugin data is no longer overwritten by RecipePlugin.
+  Cooling Fan / case / ESP fan controls appear when the build flags are on.
 - **Autotune on the Live chart.** BT, ET, RoR, heater and fan are plotted
   while autotune runs, labelled with the current point and cycle; not
   recorded or saved.

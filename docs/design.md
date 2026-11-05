@@ -326,6 +326,7 @@ New 2026-10-31, open for Shawn:
 | D32 | Setpoint ramps start at the PID input (BT) when the step applies, with a bumpless PID restart. |
 | D33 | Fake readings button is green while dummy mode is on, from a `dummy` data field. |
 | D34 | Optional scroll fan, case fan (FAN1), ESP fan (FAN2) and box temperature. |
+| D37 | Exhaust Fan / Cooling Fan names, Cooling Fan enable, Drop-as-Cooldown label, recipe log times, aux onData chain. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1733,13 +1734,15 @@ Shawn: fan1 is the case fan on the sensors with the ESP as fallback; fan2 is
 on the ESP temperature, mounted over the ESP; each with a configurable
 turn-on temperature. Wiring: docs/wiring.md.
 
-- **Scroll fan.** Follows the cooldown: stop, emergency off and every safety
-  trip start one, so the fan runs after any of them until ET is below the
-  cooldown end; with no cooldown it is off. This is the safest reading of
-  "off on STOP unless the cooldown is active": the fan only adds cooling.
-  Manual on/off is accepted only in Manual mode with the heater off and no
-  cooldown, and is dropped when the heater comes on, the mode changes or a
-  cooldown starts. Not part of the autotune fan test.
+- **Cooling Fan (scroll relay).** Follows the cooldown: STOP, End roast,
+  emergency off and every safety trip (including `nomains`) start one, so
+  the fan runs until ET is below the cooldown end and stops with the Exhaust
+  Fan; with no cooldown it is off. Never during preheat. Manual on/off is
+  accepted only in Manual mode with the heater off and no cooldown, and is
+  dropped when the heater comes on, the mode changes or a cooldown starts.
+  A saved enable (`auxFans.scrollEn`, NVS `aux`/`scrEn`, default on) keeps
+  the output off when the build has the pin but the fan is unused. Not part
+  of the autotune fan test. Page label: Cooling Fan.
 - **FAN1 / FAN2.** On/off at full duty through LEDC (10 kHz, under the
   trigger module's 20 kHz limit), 3 C hysteresis, and on when the reading is
   missing. Box temperature: average of the valid MAX31855 cold-junction
@@ -1756,8 +1759,10 @@ turn-on temperature. Wiring: docs/wiring.md.
   `max31855::boxTemperatureC`, `Snapshot::box`; data object `aux` (`box`,
   `boxSrc`, `chip`, `warn`, `scroll`, `fan1`/`fan2` with `on`, `mode`, `at`);
   command `auxFans` (`scroll`, `fan1`, `fan2`, `fan1On`, `fan2On`,
-  `boxWarn`); page ids `tile-box`, `aux-row`, `scroll-fan`, `aux-fan1`,
-  `aux-fan2`; NVS namespace `aux` (`f1On`, `f2On`, `boxW`).
+  `boxWarn`, `scrollEn`); page ids `tile-box`, `aux-row`, `scroll-fan`,
+  `aux-fan1`, `aux-fan2`, `cooling-fan-en`, `drop-label-form`; NVS namespace
+  `aux` (`f1On`, `f2On`, `boxW`, `scrEn`). Page labels: Exhaust Fan (main
+  roast fan), Cooling Fan (scroll).
 
 ### D35. End of roast — new 2026-11-02, open for Shawn
 Shawn: Roast End acts like STOP, Drop ends heating, the setpoint resets, and
@@ -1787,3 +1792,28 @@ NVS (`control`/`mainsOn`), shown only on AC dimmer builds (`getControl`
 `mainsTrip` is absent otherwise). `CPID_REQUIRE_MAINS` is now the default
 of that setting and follows `CPID_FAN` (on for the dimmer). Turning it off
 asks for a danger confirmation.
+
+### D37. Exhaust Fan / Cooling Fan names and drum-cool labels — new 2026-11-05, open for Shawn
+Shawn: Behmor cools in the drum (no bean drop). The main roast fan is the
+Exhaust Fan; the scroll relay is the Cooling Fan. Drop can be labelled
+Cooldown without changing the event code.
+
+- **Names.** User-facing page text uses Exhaust Fan and Cooling Fan.
+  Upstream identifiers (`FanVal`, `setFan`, `CPID_SCROLL_FAN`, `scroll`,
+  GPIO names) stay as they are.
+- **Cooling Fan enable.** `{"command":{"auxFans":{"scrollEn":true|false}}}`
+  saved in NVS (`scrEn`, default on). Live control hidden when the build
+  flag is off or the setting is off. Engages on STOP, End roast, every
+  safety trip and cooldown; never in preheat; shares the Exhaust Fan's ET
+  cooldown-end.
+- **Drop as Cooldown.** Page-only setting (`croaster.dropLabel`); default
+  Drop. Same `DROP` event and end-of-roast logic.
+- **Recipe Live log.** `firedText` was slicing on the first `:` in a time
+  trigger (`0:10`), producing doubled clocks (`0:10:10`). It now splits on
+  `):`. Ramp shape `front` reads as "front curve".
+- **Aux data missing on Live.** `ControlPlugin::onData` replaced the previous
+  writer, so `RecipePlugin::attach` dropped `AuxFansPlugin::writeData`.
+  Writers are chained. STOP still sets the Exhaust Fan to
+  `cooldownFan.stop` (65 % default) via `ControlPlugin::stop` →
+  `Command::Stop` with `b = 1`. `nomains` uses the same trip-fan / cooldown
+  path as the other safety trips (`tripFan_` / `cooldownFan.trip`).

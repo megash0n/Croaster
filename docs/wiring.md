@@ -27,9 +27,9 @@ the ESP32 GND.
 Thermocouple modules, the OLED and the dimmer's logic side take 3.3 V from
 the 3V3 pin. 43/44 (UART0 to the USB-UART bridge) and 48 are reserved.
 
-### Scroll fan (relay, `CPID_SCROLL_FAN`)
+### Cooling Fan (scroll relay, `CPID_SCROLL_FAN`)
 
-AC scroll fan switched by a 1-channel JQC3F-5VDC-C relay module.
+AC scroll / Cooling Fan switched by a 1-channel JQC3F-5VDC-C relay module.
 
 - Trigger jumper on **HIGH** (the board drives HIGH for on, LOW at boot).
 - DC+ to 5V (VBUS/5V pin), DC- to GND, IN to GPIO 7.
@@ -40,9 +40,12 @@ AC scroll fan switched by a 1-channel JQC3F-5VDC-C relay module.
 - Some 5 V modules need more than 3.3 V on IN to switch reliably; check that
   the relay clicks with IN at 3.3 V before closing the box.
 
-Runs while the cooldown runs (after stop, emergency off or a safety trip) and
-stops when ET falls below the cooldown end. The Live page can turn it on or
-off in Manual mode with the heater off and no cooldown.
+Shown on the Live page as Cooling Fan. Runs while the cooldown runs (after
+STOP, End roast, emergency off or any safety trip, including `nomains`) and
+stops with the Exhaust Fan when ET falls below the cooldown end. Never during
+preheat. A saved enable setting (Controls > Safety, default on) turns the
+output off for builds that leave the pin free. The Live page can turn it on
+or off in Manual mode with the heater off and no cooldown when enabled.
 
 ### 12 V fans (MOSFET modules, `CPID_FAN1`, `CPID_FAN2`)
 
