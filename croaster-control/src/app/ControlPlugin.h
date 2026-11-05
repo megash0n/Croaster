@@ -45,9 +45,20 @@ public:
         stopListener_ = fn;
     }
     // Adds fields to every data payload after the control fields (Croaster has
-    // one onJsonData hook and this plugin uses it).
+    // one onJsonData hook and this plugin uses it). Each call is chained, so
+    // AuxFansPlugin and RecipePlugin can both add fields.
     void onData(std::function<void(JsonObject&)> fn) {
-        dataWriter_ = fn;
+        if (!fn)
+            return;
+        if (!dataWriter_) {
+            dataWriter_ = std::move(fn);
+            return;
+        }
+        auto prev = std::move(dataWriter_);
+        dataWriter_ = [prev = std::move(prev), fn = std::move(fn)](JsonObject& data) {
+            prev(data);
+            fn(data);
+        };
     }
     // Asked before {"command":"autotune"} starts a run; a non-null error code
     // refuses it (reply {"ok":false,"error":code}). The recipe runner uses it.
