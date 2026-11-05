@@ -20,6 +20,7 @@
   const KEY_TP = 'croaster.autoTp';
   const KEY_RECIPE = 'croaster.recipe';
   const KEY_LAG = 'croaster.recipeLag'; // + ".F" / ".C": behind-schedule threshold in that unit
+  const KEY_DROP = 'croaster.dropLabel'; // "Drop" (default) or "Cooldown" for drum-cool setups
   const LIB_TIMEOUT_MS = 4000;
   const BEHIND_HOLD_MS = 20000; // heater at 100 % this long before the behind-schedule warning
   const MAX_SAMPLES = 4 * 3600; // 4 h at 1 Hz
@@ -35,11 +36,11 @@
   const LABELS = {
     name: 'Device name', BT: 'Bean temp (BT)', ET: 'Environment temp (ET)', DBT: 'BT rate of rise',
     DET: 'ET rate of rise', cBT: 'BT correction', cET: 'ET correction', temp: 'Unit', interval: 'Broadcast interval (s)',
-    timer: 'Uptime (s)', BurnerVal: 'Heater (%)', FanVal: 'Fan (%)', FanAssist: 'Fan assist (%)', SV: 'Setpoint', Mode: 'Mode', trip: 'Trip',
+    timer: 'Uptime (s)', BurnerVal: 'Heater (%)', FanVal: 'Exhaust Fan (%)', FanAssist: 'Exhaust Fan assist (%)', SV: 'Setpoint', Mode: 'Mode', trip: 'Trip',
     Amb: 'Cold junction', Target: 'PID input', autotune: 'Autotune', pidKp: 'PID Kp', pidKi: 'PID Ki',
     pidKd: 'PID Kd', wifiStrength: 'WiFi RSSI (dBm)', dummy: 'Fake readings', loopStackFree: 'Loop stack free (bytes)',
-    mode: 'Mode', pidInput: 'PID input', setpoint: 'Setpoint', burner: 'Heater (%)', fan: 'Fan (%)',
-    'cooldownFan.stop': 'Cooldown fan after stop (%)', 'cooldownFan.trip': 'Cooldown fan after trip (%)',
+    mode: 'Mode', pidInput: 'PID input', setpoint: 'Setpoint', burner: 'Heater (%)', fan: 'Exhaust Fan (%)',
+    'cooldownFan.stop': 'Exhaust Fan after stop (%)', 'cooldownFan.trip': 'Exhaust Fan after trip (%)',
     'cooldownFan.end': 'Cooldown ends below ET', cooling: 'Cooling',
     'watchdog.enabled': 'Comms watchdog', 'watchdog.timeout': 'Watchdog timeout (s)', 'pid.kp': 'PID Kp',
     'pid.ki': 'PID Ki', 'pid.kd': 'PID Kd', tuned: 'Gains tuned', mainsOk: 'Mains detected', mainsTrip: 'Mains trip',
@@ -47,8 +48,8 @@
     ver: 'Firmware version', ip: 'IP address', ssid: 'WiFi network', board: 'Board', darkMode: 'Dark screen',
     brightness: 'Brightness (%)',
   };
-  const MAINS_TRIP_OFF = 'Danger: turn off the mains trip? The heater will no longer turn off when the fan dimmer ' +
-    'loses AC mains, so it can keep heating with the fan stopped and overheat the roaster. Use only for bench tests without mains.';
+  const MAINS_TRIP_OFF = 'Danger: turn off the mains trip? The heater will no longer turn off when the Exhaust Fan dimmer ' +
+    'loses AC mains, so it can keep heating with the Exhaust Fan stopped and overheat the roaster. Use only for bench tests without mains.';
   const ALWAYS_LISTED = ['BT', 'ET', 'DBT', 'DET']; // left out of the telemetry while a probe has no reading
 
   const S = {
@@ -266,7 +267,7 @@
     const c = S.stopCheck;
     if (!c) return;
     if (R.stopConfirmed(d)) {
-      logReply('in', 'stop: board reports heater 0 %, Manual' + (isNum(d.FanVal) ? ', fan ' + d.FanVal + ' %' : ''));
+      logReply('in', 'stop: board reports heater 0 %, Manual' + (isNum(d.FanVal) ? ', Exhaust Fan ' + d.FanVal + ' %' : ''));
       S.stopCheck = null;
     } else if (!c.warned && Date.now() - c.at > STOP_CONFIRM_MS) {
       c.warned = true;
@@ -394,11 +395,24 @@
   }
 
   // What STOP, End roast and Drop do on the board, for their confirmations.
+  function dropLabel() {
+    return localStorage.getItem(KEY_DROP) === 'Cooldown' ? 'Cooldown' : 'Drop';
+  }
+  function applyDropLabel() {
+    P.EVENT_LABELS.DROP = dropLabel();
+    for (const b of $$('#event-buttons button[data-code="DROP"]')) b.textContent = dropLabel();
+    const form = $('#drop-label-form');
+    if (form) {
+      const v = dropLabel();
+      for (const r of form.elements.dropLabel) r.checked = r.value === v;
+    }
+  }
+
   function stopEffects() {
     const c = S.control && S.control.cooldownFan;
     const fan = c && isNum(c.stop) ? ' (' + c.stop + ' %)' : '';
     return 'The heater turns off, any running recipe is aborted, the board switches to Manual ' +
-      '(ending PID, profile or autotune) with the setpoint off, the fan runs at the cooldown speed' + fan +
+      '(ending PID, profile or autotune) with the setpoint off, the Exhaust Fan runs at the cooldown speed' + fan +
       ' until ET falls below the cooldown end' + (recording() ? ', and recording ends.' : '.');
   }
 
@@ -435,10 +449,11 @@
     const box = $('#event-buttons');
     if (!box.children.length) {
       for (const ev of R.EVENTS) {
-        const b = el('button', { type: 'button', 'data-code': ev.code, class: ev.code.toLowerCase() }, ev.label);
+        const b = el('button', { type: 'button', 'data-code': ev.code, class: ev.code.toLowerCase() },
+          ev.code === 'DROP' ? dropLabel() : ev.label);
         b.addEventListener('click', () => {
           markEvent(ev.code);
-          if (ev.code === 'DROP' && eventOf('DROP')) finishRoast('Drop marked. End the roast now?', 'End roast');
+          if (ev.code === 'DROP' && eventOf('DROP')) finishRoast(dropLabel() + ' marked. End the roast now?', 'End roast');
         });
         box.append(b);
       }
@@ -492,7 +507,7 @@
     const stop = $('#stop');
     stop.disabled = !R.stopAvailable(recording(), S.data, S.recipe);
     stop.title = stop.disabled ? 'Available while a roast records or the board is heating or running a recipe'
-      : 'Emergency stop: heater off, recipe aborted, Manual, cooldown fan';
+      : 'Emergency stop: heater off, recipe aborted, Manual, Exhaust Fan at cooldown speed';
     const start = $('#new-roast');
     start.disabled = recording();
     start.title = recording() ? 'A roast is recording: STOP or End roast ends it' : 'Start recording a roast';
@@ -836,7 +851,7 @@
     S.cursorT = s.t;
     const parts = [R.formatClock(s.t - c.t0), 'BT ' + fmt(s.bt), 'ET ' + fmt(s.et), 'RoR ' + fmt(rorAt(best, ss))];
     if (isNum(s.h)) parts.push('heater ' + s.h + '%');
-    if (isNum(s.f)) parts.push('fan ' + s.f + '%');
+    if (isNum(s.f)) parts.push('exhaust ' + s.f + '%');
     if (isNum(s.sv)) parts.push('SV ' + fmt(s.sv));
     if (isNum(s.at)) parts.push('test point ' + fmt(s.at));
     $('#readout').textContent = parts.join('  ');
@@ -850,7 +865,9 @@
     const tile = $('#tile-box');
     const form = $('form[data-send="auxFans"]');
     tile.hidden = form.hidden = !a;
-    $('#aux-row').hidden = !a || !(a.fan1 || a.fan2 || typeof a.scroll === 'boolean');
+    const scrollFitted = typeof a.scroll === 'boolean';
+    const scrollOn = !!(a.scrollEn !== false && scrollFitted);
+    $('#aux-row').hidden = !a || !(a.fan1 || a.fan2 || scrollOn);
     if (!a) return;
     const u = unitLabel();
     const hot = isNum(a.box) && isNum(a.warn) && a.box >= a.warn;
@@ -863,12 +880,12 @@
     const d = S.data || {};
     const idle = d.Mode === 'Manual' && !(d.BurnerVal > 0) && !d.cooling;
     const sf = $('#scroll-fan');
-    sf.hidden = typeof a.scroll !== 'boolean';
+    sf.hidden = !scrollOn;
     sf.classList.toggle('on', !!a.scroll);
     sf.setAttribute('aria-pressed', String(!!a.scroll));
-    sf.textContent = 'Scroll fan ' + (a.scroll ? 'on' : 'off');
+    sf.textContent = 'Cooling Fan ' + (a.scroll ? 'on' : 'off');
     sf.disabled = S.link !== 'open' || !idle;
-    sf.title = d.cooling ? 'Runs until the cooldown ends' : (idle ? 'Turn the scroll fan on or off' : 'Manual mode with the heater off only');
+    sf.title = d.cooling ? 'Runs until the cooldown ends' : (idle ? 'Turn the Cooling Fan on or off' : 'Manual mode with the heater off only');
     for (const [k, box] of [['fan1', $('#aux-fan1')], ['fan2', $('#aux-fan2')]]) {
       const f = a[k];
       box.hidden = !f;
@@ -877,9 +894,13 @@
       if (document.activeElement !== sel) sel.value = f.mode;
       $('small', box).textContent = (f.on ? 'running' : 'off') + ' · auto at ' + f.at + ' ' + u;
     }
+    const en = form.elements.scrollEn && form.elements.scrollEn.closest('label');
+    if (en) en.hidden = !scrollFitted;
     form.elements.fan1On.closest('label').hidden = !a.fan1;
     form.elements.fan2On.closest('label').hidden = !a.fan2;
-    fill('auxFans', { fan1On: a.fan1 && a.fan1.at, fan2On: a.fan2 && a.fan2.at, boxWarn: a.warn });
+    fill('auxFans', {
+      scrollEn: a.scrollEn !== false, fan1On: a.fan1 && a.fan1.at, fan2On: a.fan2 && a.fan2.at, boxWarn: a.warn,
+    });
   }
 
   function auxSend(values) {
@@ -915,7 +936,7 @@
     $('form[data-send="fanAssist"]').hidden = !fa;
     if (fa) {
       fill('fanAssist', { enabled: fa.enabled });
-      $('#fan-assist-note').textContent = 'Raises the fan above your setting, by up to ' + (isNum(fa.max) ? fa.max : 20) +
+      $('#fan-assist-note').textContent = 'Raises the Exhaust Fan above your setting, by up to ' + (isNum(fa.max) ? fa.max : 20) +
         ' %, when BT runs above the setpoint with the heater already off, to shed heat from the beans. ' +
         (fa.available ? 'Uses the saved autotune fan test.' : 'Inactive until an autotune fan test is saved.');
     }
@@ -950,6 +971,7 @@
       case 'mainsTrip': return { mainsTrip: f.enabled.checked };
       case 'auxFans': {
         const o = { boxWarn: n('boxWarn') };
+        if (f.scrollEn && !f.scrollEn.closest('label').hidden) o.scrollEn = f.scrollEn.checked;
         for (const k of ['fan1On', 'fan2On']) if (!f[k].closest('label').hidden && f[k].value !== '') o[k] = n(k);
         return { auxFans: o };
       }
@@ -1694,7 +1716,7 @@
   // Controls > Recipe edits the steps; Live shows the board's run (getRecipe).
   const TRIGGER_LABELS = { time: 'Time', bt: 'BT', et: 'ET', ror: 'RoR', event: 'Event' };
   const OP_LABELS = { gte: '\u2265', lte: '\u2264', near: '\u2248' };
-  const ACTION_LABELS = { power: 'Heater %', fan: 'Fan %', setpoint: 'Setpoint (PID)', hold: 'Hold ramp',
+  const ACTION_LABELS = { power: 'Heater %', fan: 'Exhaust Fan %', setpoint: 'Setpoint (PID)', hold: 'Hold ramp',
     cool: 'Cool (stop)', end: 'End recipe', note: 'Note' };
 
   function saveRecipeRows() {
@@ -2020,7 +2042,10 @@
     const step = P.describeStep(rec.recipe, f.step, rec.unit, u);
     const head = 'Step ' + (f.step + 1) + ' ' + (f.how === 'skipped' ? 'skipped' : f.how === 'missed' ? 'missed' : 'fired') +
       (isNum(f.at) ? ' at ' + P.clock(f.at) : ' before Charge');
-    return head + ':' + step.slice(step.indexOf(':') + 1) + (f.how === 'prompted' ? ' (waiting)' : f.how === 'confirmed' ? ' (set)' : '');
+    // describeStep is "Step N (trigger): actions"; indexOf(':') would hit "0:10" in a time trigger.
+    const sep = step.indexOf('):');
+    const actions = sep >= 0 ? step.slice(sep + 1) : '';
+    return head + actions + (f.how === 'prompted' ? ' (waiting)' : f.how === 'confirmed' ? ' (set)' : '');
   }
 
   // The ramp in progress, from getRecipe "ramp" (setpoint values in C).
@@ -2468,6 +2493,13 @@
       }));
     }
     $('#scroll-fan').addEventListener('click', () => auxSend({ scroll: !((S.data || {}).aux || {}).scroll }));
+    const dropForm = $('#drop-label-form');
+    if (dropForm) dropForm.addEventListener('change', () => {
+      const v = dropForm.elements.dropLabel.value === 'Cooldown' ? 'Cooldown' : 'Drop';
+      try { localStorage.setItem(KEY_DROP, v); } catch (_) {}
+      applyDropLabel();
+      S.dirty = true;
+    });
     for (const sel of $$('#aux-row select')) sel.addEventListener('change', () => auxSend({ [sel.dataset.aux]: sel.value }));
     for (const st of $$('.stepper')) {
       for (const b of $$('button[data-step]', st)) b.addEventListener('click', () => stepperClick(st, Number(b.dataset.step)));
@@ -2532,7 +2564,7 @@
     $('#recipe-load').addEventListener('click', loadRecipe);
     $('#recipe-run').addEventListener('click', runRecipe);
     $('#rl-start').addEventListener('click', runRecipe);
-    $('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and fan stay as they are.', () => send({ command: 'recipeAbort' })));
+    $('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and Exhaust Fan stay as they are.', () => send({ command: 'recipeAbort' })));
     $('#rl-skip').addEventListener('click', () => send({ command: 'recipeSkip' }));
     $('#rl-apply').addEventListener('click', () => { if (S.recipe) send({ command: 'recipeConfirm', step: S.recipe.prompt }); });
     $('#rl-dismiss').addEventListener('click', () => { if (S.recipe) send({ command: 'recipeSkip', step: S.recipe.prompt }); });
@@ -2577,6 +2609,7 @@
 
   async function start() {
     S.session = loadJson(KEY_SESSION) || newSession();
+    applyDropLabel();
     if (!Array.isArray(S.session.samples) || !Array.isArray(S.session.events)) S.session = newSession();
     const wasRecording = R.isRecording(S.session);
     R.resumeSession(S.session, Date.now(), RESUME_GAP_MS);

@@ -319,15 +319,19 @@
     if (t.type === 'ror') return 'RoR ' + op + ' ' + convertDelta(t.value, from, to) + ' \u00b0' + to + '/min';
     return t.type.toUpperCase() + ' ' + op + ' ' + convert(t.value, from, to) + ' \u00b0' + to;
   }
-  // " over 2:00" or " over 2:00, front"
+  // " over 2:00" or " over 2:00, front curve"
+  function shapeText(shape) {
+    if (!shape || shape === 'linear') return '';
+    return ', ' + (shape === 'front' ? 'front curve' : shape);
+  }
   function rampText(a) {
     if (!(isNum(a.ramp) && a.ramp > 0)) return '';
-    return ' over ' + clock(a.ramp) + (a.shape && a.shape !== 'linear' ? ', ' + a.shape : '');
+    return ' over ' + clock(a.ramp) + shapeText(a.shape);
   }
   function describeAction(a, from, to) {
     switch (a.type) {
       case 'power': return 'power ' + a.value + ' %' + rampText(a);
-      case 'fan': return 'fan ' + a.value + ' %';
+      case 'fan': return 'exhaust fan ' + a.value + ' %';
       case 'setpoint':
         return 'setpoint ' + convert(a.value, from, to) + ' \u00b0' + to + rampText(a);
       case 'hold': return 'hold';

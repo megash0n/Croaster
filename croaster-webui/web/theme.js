@@ -38,7 +38,7 @@
     { key: 'ror', label: 'RoR (BT)', group: 'Chart' },
     { key: 'ror-et', label: 'RoR (ET)', group: 'Chart' },
     { key: 'heat', label: 'Heater', group: 'Chart' },
-    { key: 'fan', label: 'Fan', group: 'Chart' },
+    { key: 'fan', label: 'Exhaust Fan', group: 'Chart' },
     { key: 'sv', label: 'Setpoint', group: 'Chart' },
     { key: 'event', label: 'Event markers', group: 'Chart' },
   ];

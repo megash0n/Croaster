@@ -148,7 +148,7 @@ test('the page sends commands only from user actions', () => {
     'send({ command: { autotune: choice } });',
     'send(cmd);',
     'send({ command: payload });',
-    "$('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and fan stay as they are.', () => send({ command: 'recipeAbort' })));",
+    "$('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and Exhaust Fan stay as they are.', () => send({ command: 'recipeAbort' })));",
     "$('#rl-skip').addEventListener('click', () => send({ command: 'recipeSkip' }));",
     "$('#rl-apply').addEventListener('click', () => { if (S.recipe) send({ command: 'recipeConfirm', step: S.recipe.prompt }); });",
     "$('#rl-dismiss').addEventListener('click', () => { if (S.recipe) send({ command: 'recipeSkip', step: S.recipe.prompt }); });",

@@ -137,7 +137,7 @@ test('library checks and round-trips ramp shapes, power ramps and chargeTemp', (
   assert.strictEqual(back[0].actions[0].shape, 'custom');
   assert.deepStrictEqual(back[0].actions[0].curve, RS.PRESETS.back);
   assert.strictEqual(back[0].actions[1].shape, 'front');
-  assert.match(L.describeStep(rec, 0, 'F', 'F'), /setpoint 400 °F over 2:00, custom, power 70 % over 0:30, front/);
+  assert.match(L.describeStep(rec, 0, 'F', 'F'), /setpoint 400 °F over 2:00, custom, power 70 % over 0:30, front curve/);
 });
 
 test('rampStartEstimate matches the board: BT at the step, estimated from the trigger or the target before', () => {

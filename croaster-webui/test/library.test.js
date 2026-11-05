@@ -97,7 +97,7 @@ test('editor rows round trip, with unit conversion', () => {
 
 test('describeStep reads like the Live list', () => {
   const rec = recipe();
-  assert.equal(L.describeStep(rec, 0, 'F', 'F'), 'Step 1 (BT \u2265 389 \u00b0F): fan 50 %, power 60 %');
+  assert.equal(L.describeStep(rec, 0, 'F', 'F'), 'Step 1 (BT \u2265 389 \u00b0F): exhaust fan 50 %, power 60 %');
   const t = { steps: [{ trigger: { type: 'time', value: 462 }, label: 'Late', actions: [{ type: 'setpoint', value: 220, ramp: 90 }, { type: 'cool' }] }] };
   assert.equal(L.describeStep(t, 0, 'C', 'C'), 'Step 1 Late (time \u2265 7:42): setpoint 220 \u00b0C over 1:30, cool');
   assert.equal(L.describeStep({ steps: [{ trigger: { type: 'event', value: 'FC_START' }, actions: [{ type: 'note', text: 'hi' }] }] }, 0, 'C', 'C'),

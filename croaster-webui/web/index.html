@@ -71,13 +71,13 @@
         <div class="tile et"><span class="tile-label">ET</span><span class="tile-value num" id="t-et">—</span><span class="tile-unit" data-unit></span></div>
         <div class="tile ror"><span class="tile-label">RoR <small id="ror-src">device</small></span><span class="tile-value num" id="t-ror">—</span><span class="tile-unit" id="t-ror-et"></span></div>
         <div class="tile heat" data-field="BurnerVal"><span class="tile-label">Heater</span><span class="tile-value num" id="t-heat">—</span><span class="tile-unit">%</span></div>
-        <div class="tile fan" data-field="FanVal"><span class="tile-label">Fan</span><span class="tile-value num" id="t-fan">—</span><span class="tile-unit">%</span><span class="tile-sub small" id="t-fan-assist" title="Fan assist: extra airflow while BT runs above the setpoint with the heater off" hidden></span></div>
+        <div class="tile fan" data-field="FanVal"><span class="tile-label">Exhaust Fan</span><span class="tile-value num" id="t-fan">—</span><span class="tile-unit">%</span><span class="tile-sub small" id="t-fan-assist" title="Exhaust Fan assist: extra airflow while BT runs above the setpoint with the heater off" hidden></span></div>
         <div class="tile sv" data-field="SV"><span class="tile-label">Setpoint</span><span class="tile-value num" id="t-sv">—</span><span class="tile-unit" data-unit></span></div>
         <div class="tile mode" data-field="Mode"><span class="tile-label">Mode</span><span class="tile-value" id="t-mode">—</span><span class="tile-unit" id="t-trip"></span></div>
         <div class="tile box" id="tile-box" hidden><span class="tile-label">Box <small id="box-src"></small></span><span class="tile-value num" id="t-box">—</span><span class="tile-unit" id="t-chip"></span></div>
       </div>
       <div class="row-buttons aux-row" id="aux-row" hidden>
-        <button type="button" id="scroll-fan" aria-pressed="false" hidden>Scroll fan</button>
+        <button type="button" id="scroll-fan" aria-pressed="false" hidden>Cooling Fan</button>
         <label id="aux-fan1" hidden>Case fan <select data-aux="fan1"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select> <small class="muted"></small></label>
         <label id="aux-fan2" hidden>ESP fan <select data-aux="fan2"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select> <small class="muted"></small></label>
       </div>
@@ -87,7 +87,7 @@
           <div class="legend">
             <span class="key bt">BT</span><span class="key et">ET</span><span class="key ror">RoR</span>
             <span class="key ror-et" id="key-ror-et">ET RoR</span><span class="key sv" data-field="SV">SV</span><span class="key at" data-field="atTarget">Test point</span>
-            <span class="key heat" data-field="BurnerVal">Heater</span><span class="key fan" data-field="FanVal">Fan</span>
+            <span class="key heat" data-field="BurnerVal">Heater</span><span class="key fan" data-field="FanVal">Exhaust Fan</span>
             <span class="key ref" id="key-ref" hidden></span>
           </div>
           <label class="toggle" title="Least-squares slope of BT over the last 30 s, times 60">
@@ -96,7 +96,7 @@
           <button type="button" class="ghost" id="ref-btn" data-needs="controls" hidden title="Overlay a saved roast">Ref</button>
         </div>
         <svg id="chart" class="chart" role="img" aria-label="BT, ET and RoR over time"></svg>
-        <svg id="strips" class="strips" data-field="BurnerVal" role="img" aria-label="Heater and fan over time"></svg>
+        <svg id="strips" class="strips" data-field="BurnerVal" role="img" aria-label="Heater and Exhaust Fan over time"></svg>
         <div class="readout num" id="readout"></div>
       </div>
 
@@ -113,7 +113,7 @@
           <div class="row-buttons">
             <button type="button" id="rl-start">Run recipe</button>
             <button type="button" class="ghost" id="rl-skip" title="Mark the next step as done without running it">Skip step</button>
-            <button type="button" class="stop-inline" id="rl-abort" title="Stop the recipe; the heater and fan stay as they are">Abort recipe</button>
+            <button type="button" class="stop-inline" id="rl-abort" title="Stop the recipe; the heater and Exhaust Fan stay as they are">Abort recipe</button>
           </div>
         </div>
         <div class="recipe-warn" id="rl-behind" role="status" hidden></div>
@@ -150,7 +150,7 @@
             </div>
           </div>
           <div class="field">
-            <span>Fan %</span>
+            <span>Exhaust Fan %</span>
             <div class="stepper" data-key="fan" data-field="FanVal" data-min="0" data-max="100">
               <button type="button" data-step="-5">−5</button><button type="button" data-step="-1">−1</button>
               <output class="num">—</output>
@@ -180,25 +180,25 @@
             <button type="submit">Save gains</button>
           </form>
           <form class="field wide" data-send="fanAssist">
-            <span>Fan assist</span>
+            <span>Exhaust Fan assist</span>
             <label><input type="checkbox" name="enabled"> enabled</label>
             <button type="submit">Save</button>
-            <span class="muted small" id="fan-assist-note">Raises the fan above your setting when BT runs above the setpoint with the heater already off, to shed heat from the beans. Needs a saved autotune fan test.</span>
+            <span class="muted small" id="fan-assist-note">Raises the Exhaust Fan above your setting when BT runs above the setpoint with the heater already off, to shed heat from the beans. Needs a saved autotune fan test.</span>
           </form>
-          <p class="muted small">The board caps the heater and setpoint at its configured limits and keeps the fan up while heating.</p>
+          <p class="muted small">The board caps the heater and setpoint at its configured limits and keeps the Exhaust Fan up while heating.</p>
         </div>
 
         <div class="card">
           <h2>Safety</h2>
           <div class="row-buttons">
-            <button type="button" class="stop-inline" data-cmd='{"command":"stop"}' data-confirm="Turn the heater off? The board switches to Manual and runs the fan at the cooldown speed until ET falls below the cooldown end. A recording in this page keeps running until STOP.">Heater off</button>
+            <button type="button" class="stop-inline" data-cmd='{"command":"stop"}' data-confirm="Turn the heater off? The board switches to Manual and runs the Exhaust Fan at the cooldown speed until ET falls below the cooldown end. A recording in this page keeps running until STOP.">Heater off</button>
             <button type="button" data-cmd='{"command":"clearTrip"}'>Clear trip</button>
           </div>
           <form class="field wide" data-send="cooldownFan">
-            <span>Cooldown fan %</span>
+            <span>Exhaust Fan cooldown %</span>
             <label>after stop <input type="number" name="stop" min="0" max="100" step="1" required></label>
             <label>after trip <input type="number" name="trip" min="0" max="100" step="1" required></label>
-            <label title="Cooldown ends (fan off) once ET falls below this. Over-temperature keeps the fan at 100 % until then. Without an ET reading the fan keeps running.">off below ET <input type="number" name="end" step="any" required> <span data-unit></span></label>
+            <label title="Cooldown ends (Exhaust Fan and Cooling Fan off) once ET falls below this. Over-temperature keeps the Exhaust Fan at 100 % until then. Without an ET reading the fans keep running.">off below ET <input type="number" name="end" step="any" required> <span data-unit></span></label>
             <button type="submit">Save</button>
           </form>
           <form class="field wide" data-send="watchdog">
@@ -211,14 +211,21 @@
             <span>Mains trip</span>
             <label><input type="checkbox" name="enabled"> enabled</label>
             <button type="submit">Save</button>
-            <span class="muted small">Turns the heater off when the fan dimmer loses AC mains (no zero-cross), since the fan cannot run then. Saved on the board.</span>
+            <span class="muted small">Turns the heater off when the fan dimmer loses AC mains (no zero-cross), since the Exhaust Fan cannot run then. Saved on the board.</span>
           </form>
           <form class="field wide" data-send="auxFans" hidden>
             <span>Electronics fans</span>
+            <label id="cooling-fan-en" hidden title="Cooling Fan (scroll relay): on STOP, End roast, safety trips and cooldown; never in preheat. Off when disabled."><input type="checkbox" name="scrollEn"> Cooling Fan enabled</label>
             <label title="Case fan (FAN1): on at the box temperature, off 3 C below">case fan on at <input type="number" name="fan1On" step="any"> <span data-unit></span></label>
             <label title="ESP fan (FAN2): on at the ESP32-S3 chip temperature, off 3 C below">ESP fan on at <input type="number" name="fan2On" step="any"> <span data-unit></span></label>
             <label title="The Box tile turns amber at this temperature">box warning <input type="number" name="boxWarn" step="any" required> <span data-unit></span></label>
             <button type="submit">Save</button>
+          </form>
+          <form class="field wide" id="drop-label-form">
+            <span>Drop event name</span>
+            <label><input type="radio" name="dropLabel" value="Drop" checked> Drop</label>
+            <label><input type="radio" name="dropLabel" value="Cooldown"> Cooldown</label>
+            <span class="muted small">Same event and logic; only the Live button and labels change. Use Cooldown when beans cool in the drum.</span>
           </form>
         </div>
 
@@ -227,7 +234,7 @@
           <p class="muted small" id="at-plan">Measures how the roaster responds at a few test temperatures and calculates PID gains from it.</p>
           <div class="row-buttons">
             <button type="button" id="at-start" data-mode="Tuning">Start autotune</button>
-            <button type="button" id="at-stop" class="stop-inline" hidden data-cmd='{"command":"stop"}' data-confirm="Stop autotune? The heater turns off, the board switches to Manual and sets the fan to the cooldown speed. The gains are not changed.">Stop autotune</button>
+            <button type="button" id="at-stop" class="stop-inline" hidden data-cmd='{"command":"stop"}' data-confirm="Stop autotune? The heater turns off, the board switches to Manual and sets the Exhaust Fan to the cooldown speed. The gains are not changed.">Stop autotune</button>
           </div>
           <p class="small">Status: <span class="num" id="autotune-status">—</span> <span class="err-text" id="at-error"></span></p>
           <div id="at-run" hidden>
@@ -244,7 +251,7 @@
             <div id="at-fan" hidden>
               <p class="small" id="at-fan-summary"></p>
               <table class="at-table" id="at-fan-table">
-                <thead><tr><th>Fan</th><th>Hold heater</th><th>BT dip</th><th>Recovery</th><th>Fan gain</th><th>Heater-off fall</th></tr></thead>
+                <thead><tr><th>Exhaust Fan</th><th>Hold heater</th><th>BT dip</th><th>Recovery</th><th>Fan gain</th><th>Heater-off fall</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -259,7 +266,7 @@
         <div class="card span2">
           <h2>Profile</h2>
           <table class="profile" id="profile">
-            <thead><tr><th>#</th><th>Duration s</th><th>Setpoint <span data-unit></span></th><th>Curve</th><th>Fan %</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Duration s</th><th>Setpoint <span data-unit></span></th><th>Curve</th><th>Exhaust Fan %</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
           <div class="row-buttons">
@@ -507,7 +514,7 @@
   <form method="dialog">
     <h2 id="at-start-title">Start autotune</h2>
     <p class="small" id="at-start-text"></p>
-    <label class="small at-fan-option" id="at-fan-option"><input type="checkbox" id="at-fan-test" checked> Fan test
+    <label class="small at-fan-option" id="at-fan-option"><input type="checkbox" id="at-fan-test" checked> Exhaust Fan test
       <span class="muted" id="at-fan-text"></span></label>
     <div class="row-buttons">
       <button value="cancel" class="ghost">Cancel</button>
@@ -531,7 +538,7 @@
     <div id="at-dialog-fan" hidden>
       <p class="small" id="at-dialog-fan-summary"></p>
       <table class="at-table" id="at-dialog-fan-table">
-        <thead><tr><th>Fan</th><th>Hold heater</th><th>Fan gain</th><th>Heater-off fall</th></tr></thead>
+        <thead><tr><th>Exhaust Fan</th><th>Hold heater</th><th>Exhaust Fan gain</th><th>Heater-off fall</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
