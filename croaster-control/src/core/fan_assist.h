@@ -7,7 +7,8 @@
 // fan rises above the user's or recipe's value, within a bound and at a
 // limited rate, and returns to it once BT is back on the path.
 // Never below the user's or recipe's fan; off in Manual (stop, cooldown,
-// trips) and Autotune; off unless a fan test is saved and the option is on.
+// trips) and Autotune; off when the setpoint is off (0 is not a target of
+// 0 C); off unless a fan test is saved and the option is on.
 // Pure (no Arduino), so it is host-tested.
 #include <cstdint>
 

@@ -148,9 +148,9 @@ const char* parseAction(JsonVariantConst j, char unit, Action& a, Recipe& r) {
     if (eq(type, "power") || eq(type, "fan")) {
         a.type = eq(type, "power") ? ActionType::Power : ActionType::Fan;
         if (!percent(j["value"], a.value))
-            return "power and fan must be 0..100 %";
+            return "power and Exhaust Fan must be 0..100 %";
         if (a.type == ActionType::Fan)
-            return j["ramp"].isNull() && j["shape"].isNull() ? "" : "fan does not ramp";
+            return j["ramp"].isNull() && j["shape"].isNull() ? "" : "Exhaust Fan does not ramp";
         return parseRamp(j, a, r);
     }
     if (eq(type, "setpoint")) {

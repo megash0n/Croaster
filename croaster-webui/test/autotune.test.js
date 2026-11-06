@@ -93,7 +93,7 @@ const fanLevel = (fan, hold, shed) => ({ fan, hold, dip: 1.2, recovery: 18, gain
 
 test('start dialog: the fan test sentence and the estimate with and without it', () => {
   const rep = { unit: 'F', plan: fanPlan };
-  assert.match(A.fanTestText(rep), /^Measures how airflow removes heat from the beans: after the PID test points it holds 300 °F at fan 30, 60 and 90 %/);
+  assert.match(A.fanTestText(rep), /^Measures how airflow removes heat from the beans: after the PID test points it holds 300 °F at Exhaust Fan 30, 60 and 90 %/);
   assert.match(A.fanTestText(rep), /Adds about 30 min\.$/);
   assert.match(A.confirmText(rep, true), /about 85 minutes/);
   assert.match(A.confirmText(rep, false), /about 55 minutes/);

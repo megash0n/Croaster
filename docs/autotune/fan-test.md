@@ -93,8 +93,9 @@ when gains are re-tuned. The model has room for a second fan channel
   5 % per °C beyond a 2 °C band, up to `CPID_FAN_ASSIST_MAX` (default 20 %),
   rising at most 1 %/s and falling at 2 %/s, and returns it once BT is back on
   the path. It never lowers the fan below that value, never undercuts the
-  heating fan floor, acts only in PID and Profile, never during cooldown, a
-  trip or autotune, and does nothing until a fan test is saved. The extra is
+  heating fan floor, acts only in PID and Profile with the setpoint above 0
+  (0 is off, not a target of 0 °C), never during cooldown, a trip or
+  autotune, and does nothing until a fan test is saved. The extra is
   reported as `FanAssist` in data and shown under the fan tile on Live. On
   the simulated drum the effect is small (BT 205 → 170 °C with the heater off:
   78 s without, 76 s with) because the drum walls dominate its loss; on a

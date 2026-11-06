@@ -1,7 +1,10 @@
 # Analysis — yaeger + Croaster → one roaster firmware
 
 Companion to [`design.md`](design.md) (architecture + decisions) and
-[`tickets.md`](tickets.md) (remaining work). Date: 2026-10-26.
+[`tickets.md`](tickets.md) (remaining work). Date: 2026-10-26. The fork
+has since added `boards/esp32s3-pid`, `boards/esp32s3-monitor`,
+`croaster-control` and `croaster-webui`. This file is the starting
+comparison; current layout is `CONTEXT.md` and `docs/how.md`.
 
 ## 1. The two repos
 

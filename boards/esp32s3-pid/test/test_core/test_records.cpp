@@ -128,6 +128,10 @@ void test_roasts_keep_the_newest() {
     TEST_ASSERT_EQUAL(2, (int)out.pruned.size()); // over the count, then for space
     fs.failWrites = 2;
     TEST_ASSERT_EQUAL(records::Error::Storage, save(s, roast("fails", 7000), out));
+    TEST_ASSERT_TRUE(out.pruned.size() >= 1); // deleted to make room, then the write still failed
+    for (const std::string& id : out.pruned)
+        TEST_ASSERT_EQUAL(0, (int)fs.files.count(id + ".json"));
+    TEST_ASSERT_EQUAL(0, (int)fs.files.count("fails.json"));
     TEST_ASSERT_EQUAL(0, (int)fs.files.count("fails.tmp"));
     // A restart re-indexes, newest first, and clears temporary files.
     fs.files["x.tmp"] = "{";

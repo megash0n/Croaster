@@ -20,7 +20,6 @@
   const KEY_TP = 'croaster.autoTp';
   const KEY_RECIPE = 'croaster.recipe';
   const KEY_LAG = 'croaster.recipeLag'; // + ".F" / ".C": behind-schedule threshold in that unit
-  const KEY_DROP = 'croaster.dropLabel'; // "Drop" (default) or "Cooldown" for drum-cool setups
   const LIB_TIMEOUT_MS = 4000;
   const BEHIND_HOLD_MS = 20000; // heater at 100 % this long before the behind-schedule warning
   const MAX_SAMPLES = 4 * 3600; // 4 h at 1 Hz
@@ -89,6 +88,7 @@
     beans: { state: 'unknown', list: [], askedAt: 0, max: null, getIntent: {} }, // green-coffee records
     coffeeRef: null, // coffee-ref.json, loaded when the bean form first opens
     cooling: null, // the board's "cooling" flag in the last data
+    dropWant: null, dropWantAt: 0, // Drop/Cooldown label sent, until the board reports it
     ref: null, refCache: null, // reference roast record shown on the chart; its curve in the page unit
   };
   let worker = null;
@@ -188,6 +188,7 @@
     if (msg.data && typeof msg.data === 'object') {
       if (msg.name) S.name = msg.name;
       S.data = msg.data;
+      if (S.dropWant && msg.data.dropLabel === S.dropWant) S.dropWant = null;
       S.dummy = R.dummyState(msg.data);
       S.dataAt = at;
       watchUptime(msg.data.timer);
@@ -395,8 +396,11 @@
   }
 
   // What STOP, End roast and Drop do on the board, for their confirmations.
+  // The name is a board setting (data dropLabel). Default Drop until the board reports one.
   function dropLabel() {
-    return localStorage.getItem(KEY_DROP) === 'Cooldown' ? 'Cooldown' : 'Drop';
+    if (S.dropWant && Date.now() - S.dropWantAt > PENDING_DROP_MS) S.dropWant = null;
+    if (S.dropWant === 'Cooldown' || S.dropWant === 'Drop') return S.dropWant;
+    return S.data && S.data.dropLabel === 'Cooldown' ? 'Cooldown' : 'Drop';
   }
   function applyDropLabel() {
     P.EVENT_LABELS.DROP = dropLabel();
@@ -472,7 +476,7 @@
     const t0 = chargeT();
     if (!evs.length) list.append(el('li', { class: 'muted' }, 'No events yet'));
     for (const e of evs) {
-      const label = (R.EVENTS.find((x) => x.code === e.code) || { label: e.code }).label;
+      const label = e.code === 'DROP' ? dropLabel() : (R.EVENTS.find((x) => x.code === e.code) || { label: e.code }).label;
       const at = t0 === null ? '' : R.formatClock(e.t - t0);
       const temp = isNum(e.bt) ? ' · ' + e.bt.toFixed(1) + ' ' + unitLabel() : '';
       list.append(el('li', {}, label + ' ' + at + temp + (e.auto ? ' (auto)' : '')));
@@ -482,6 +486,7 @@
   // ---------- rendering ----------
   function render() {
     S.dirty = false;
+    applyDropLabel();
     const d = S.data || {};
     $('#device-name').textContent = S.name || (S.link === 'open' ? 'connected' : 'not connected');
     const link = $('#link');
@@ -1053,7 +1058,7 @@
       if (s.fanValue !== '' && s.fanValue !== undefined) {
         const fan = Number(s.fanValue);
         if (!(fan >= 0 && fan <= 100)) {
-          $('#profile-status').textContent = 'Step ' + (i + 1) + ': fan must be 0 to 100 %.';
+          $('#profile-status').textContent = 'Step ' + (i + 1) + ': Exhaust Fan must be 0 to 100 %.';
           return;
         }
         step.fanValue = fan;
@@ -1234,8 +1239,13 @@
       else if (intent === 'ref') setReference(Object.assign({ id: r.id }, r.roast));
     } else if (cmd === 'roastSave') {
       if (!r.ok) {
-        fail('Not saved');
-        logReply('err', 'roast not saved: ' + why() + (r.error === 'storage' ? '; board storage full or failing: delete old roasts' : ''));
+        const pruned = r.pruned || [];
+        const room = pruned.length ? ' Deleted ' + pruned.join(', ') + ' while making room; the new roast was not saved.' : '';
+        recStatus('Not saved: ' + why() + '.' + room +
+          (r.error === 'storage' ? ' Board storage is full or failing: delete old roasts.' : ''), true);
+        logReply('err', 'roast not saved: ' + why() + (pruned.length ? '; deleted ' + pruned.join(', ') : '') +
+          (r.error === 'storage' ? '; board storage full or failing' : ''));
+        if (pruned.length) requestRoasts();
         return;
       }
       if (r.created && S.rec.pendingFor === S.session.startedAt) { S.session.savedId = r.id; saveSession(true); }
@@ -2061,8 +2071,9 @@
     const u = edUnit();
     const v = (x) => (n.rp.kind === 'power' ? Math.round(x) + ' %' : Math.round(P.convert(x, 'C', u)) + ' ' + unitLabel());
     const shape = RS.SHAPES.find((sh) => sh !== 'custom' && RS.PRESETS[sh].join() === n.rates.join()) || 'custom';
+    const shapeName = shape === 'front' ? 'front curve' : RS.LABELS[shape].toLowerCase();
     return (n.rp.kind === 'power' ? 'Heater' : 'Setpoint') + ' ramp ' + v(n.rp.from) + ' \u2192 ' + v(n.rp.to) + ', ' +
-      RS.LABELS[shape].toLowerCase() + ', ' + P.clock(n.elapsed) + ' of ' + P.clock(n.rp.duration) + '.';
+      shapeName + ', ' + P.clock(n.elapsed) + ' of ' + P.clock(n.rp.duration) + '.';
   }
 
   function renderRecipeLive() {
@@ -2496,8 +2507,11 @@
     const dropForm = $('#drop-label-form');
     if (dropForm) dropForm.addEventListener('change', () => {
       const v = dropForm.elements.dropLabel.value === 'Cooldown' ? 'Cooldown' : 'Drop';
-      try { localStorage.setItem(KEY_DROP, v); } catch (_) {}
+      S.dropWant = v;
+      S.dropWantAt = Date.now();
+      send({ command: { dropLabel: v } });
       applyDropLabel();
+      renderRecipe();
       S.dirty = true;
     });
     for (const sel of $$('#aux-row select')) sel.addEventListener('change', () => auxSend({ [sel.dataset.aux]: sel.value }));
@@ -2609,6 +2623,7 @@
 
   async function start() {
     S.session = loadJson(KEY_SESSION) || newSession();
+    try { localStorage.removeItem('croaster.dropLabel'); } catch (_) { /* the label now lives on the board */ }
     applyDropLabel();
     if (!Array.isArray(S.session.samples) || !Array.isArray(S.session.events)) S.session = newSession();
     const wasRecording = R.isRecording(S.session);

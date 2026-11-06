@@ -90,7 +90,7 @@ test('checkRecipe flags a ramp steeper than the model allows, from the target be
   assert.strictEqual(w[0].action, 1);
   near(w[0].needC, 120 * 2, 1e-9); // 60 C in 30 s, twice as steep at the start
   near(w[0].atC, 150, 1e-9);
-  assert.match(RS.checkText(w[0], 'F'), /^Needs 432 °F\/min near 302 °F; the saved autotune model gives about \d+ °F\/min at fan 50 %/);
+  assert.match(RS.checkText(w[0], 'F'), /^Needs 432 °F\/min near 302 °F; the saved autotune model gives about \d+ °F\/min at Exhaust Fan 50 %/);
   // Same ramp, linear and slow enough: nothing.
   recipe.steps[1].actions[1] = { type: 'setpoint', value: 210, ramp: 600 };
   assert.deepStrictEqual(RS.checkRecipe(recipe, 'C', saved, 'C'), []);
@@ -113,7 +113,7 @@ test('library checks and round-trips ramp shapes, power ramps and chargeTemp', (
   assert.strictEqual(L.recipeReason(step({ type: 'power', value: 60, ramp: 60, shape: 'custom', curve: new Array(21).fill(0) }), 'C'), 'curve needs a rate above 0');
   assert.strictEqual(L.recipeReason(step({ type: 'power', value: 60, ramp: 60, shape: 'custom', curve: new Array(21).fill(101) }), 'C'), 'curve rates must be 0..100');
   assert.strictEqual(L.recipeReason(step({ type: 'setpoint', value: 200, curve: RS.PRESETS.back }), 'C'), 'curve needs shape custom');
-  assert.strictEqual(L.recipeReason(step({ type: 'fan', value: 60, ramp: 30 }), 'C'), 'fan does not ramp');
+  assert.strictEqual(L.recipeReason(step({ type: 'fan', value: 60, ramp: 30 }), 'C'), 'Exhaust Fan does not ramp');
   assert.strictEqual(L.recipeReason(step({ type: 'power', value: 60, ramp: 30, shape: 'back' }), 'C'), '');
   assert.strictEqual(L.recipeReason(Object.assign({ chargeTemp: 700 }, step({ type: 'fan', value: 1 })), 'F'), 'chargeTemp must be 0..350 C');
   assert.strictEqual(L.recipeReason(Object.assign({ chargeTemp: 392 }, step({ type: 'fan', value: 1 })), 'F'), '');

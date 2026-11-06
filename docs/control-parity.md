@@ -68,7 +68,7 @@ until the comms watchdog stops the heater.
 | Heater drive: 50 Hz PWM on an SSR pin | Time-proportional SSR window (zero-cross SSR switches whole half-cycles, so fast PWM gets rounded off) | **better** for a zero-cross SSR |
 | Fan drive: PWM / dimmer | AC dimmer (zero-cross + phase angle) or PWM, chosen in `config.h` | match |
 | Profile follower: in the README only, not in Shawn's yaeger code | Firmware profiles: steps of duration/setpoint/interpolation/fan, run on the ESP32 | **better** |
-| Cooldown fan default 65 % | 65 % after `stop` (`CPID_COOLDOWN_FAN_STOP`), 100 % when any trip starts (`CPID_COOLDOWN_FAN_TRIP`); both changeable via `cooldownFan`, the stop value also via `setPreferences`, saved | **match** after stop; trips follow yaeger's disconnect (D19) |
+| Cooldown fan default 65 % | Exhaust Fan 65 % after `stop` (`CPID_COOLDOWN_FAN_STOP`), 100 % when any trip starts (`CPID_COOLDOWN_FAN_TRIP`); both changeable via `cooldownFan`, the stop value also via `setPreferences`, saved. Cooldown ends when ET is below `end` (60 °C). The Cooling Fan relay follows that cooldown. | **match** after stop; trips follow yaeger's disconnect (D19) |
 
 ## Safety
 

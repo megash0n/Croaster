@@ -73,6 +73,15 @@ test('STOP starts disabled and acts only through a confirm', () => {
   assert.match(app, /stop\.disabled = !R\.stopAvailable\(recording\(\), S\.data, S\.recipe\);/);
 });
 
+test('the Drop label is read from the board, not the browser', () => {
+  const app = read('app.js');
+  assert.equal((app.match(/croaster\.dropLabel/g) || []).length, 1);
+  assert.match(app, /localStorage\.removeItem\('croaster\.dropLabel'\)/);
+  assert.match(app, /S\.data && S\.data\.dropLabel === 'Cooldown'/);
+  assert.match(html, /name="dropLabel" value="Cooldown"/);
+  assert.match(html, /Saved on the board/);
+});
+
 test('samples are recorded only after an explicit start', () => {
   const app = read('app.js');
   const add = app.slice(app.indexOf('function addSample('), app.indexOf('function addEvent('));
@@ -147,6 +156,7 @@ test('the page sends commands only from user actions', () => {
     "send(fanText ? { command: 'autotune', fanTest: box.checked } : { command: 'autotune' });",
     'send({ command: { autotune: choice } });',
     'send(cmd);',
+    'send({ command: { dropLabel: v } });',
     'send({ command: payload });',
     "$('#rl-abort').addEventListener('click', () => confirmThen('Abort the recipe? No further steps run; the heater and Exhaust Fan stay as they are.', () => send({ command: 'recipeAbort' })));",
     "$('#rl-skip').addEventListener('click', () => send({ command: 'recipeSkip' }));",

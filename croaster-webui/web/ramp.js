@@ -228,12 +228,12 @@
     return out;
   }
 
-  // "Needs 30 °F/min near 380 °F; the saved autotune model gives about 22 °F/min at fan 40 %."
+  // "Needs 30 °F/min near 380 °F; the saved autotune model gives about 22 °F/min at Exhaust Fan 40 %."
   function checkText(w, unit) {
     const d = unit === 'K' ? ' K' : ' \u00b0' + unit;
     return 'Needs ' + Math.round(deltaFromC(w.needC, unit)) + d + '/min near ' + Math.round(fromC(w.atC, unit)) + d +
       '; the saved autotune model gives about ' + Math.round(deltaFromC(w.maxC, unit)) + d + '/min' +
-      (isNum(w.fan) ? ' at fan ' + Math.round(w.fan) + ' %' : '') + '. BT will fall behind: lengthen the ramp or use a flatter shape.';
+      (isNum(w.fan) ? ' at Exhaust Fan ' + Math.round(w.fan) + ' %' : '') + '. BT will fall behind: lengthen the ramp or use a flatter shape.';
   }
 
   return { POINTS, STEP, KNOTS, SHAPES, LABELS, HINTS, PRESETS, snap, validCurve, knotsOf, fromKnots, rates, fraction, peak, normalize, rateIcon, path,
