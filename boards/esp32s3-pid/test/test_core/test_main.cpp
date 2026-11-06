@@ -386,6 +386,22 @@ void test_protocol_cooldown_end() {
     TEST_ASSERT_EQUAL_FLOAT(392.0f, data["SV"].as<float>());
 }
 
+void test_protocol_drop_label() {
+    auto p = parse(R"({"command":{"dropLabel":"Cooldown"}})", 'F', "dropLabel");
+    TEST_ASSERT_TRUE(p.hasDropLabel);
+    TEST_ASSERT_TRUE(p.dropCooldown);
+    TEST_ASSERT_EQUAL(0, (int)p.count); // a label, not a control command
+    p = parse(R"({"command":{"dropLabel":"Drop"}})", 'C', "dropLabel");
+    TEST_ASSERT_TRUE(p.hasDropLabel);
+    TEST_ASSERT_FALSE(p.dropCooldown);
+    p = parse(R"({"command":{"dropLabel":"drop"}})", 'C', "dropLabel"); // not the canonical name
+    TEST_ASSERT_FALSE(p.hasDropLabel);
+    p = parse(R"({"command":{"dropLabel":true}})", 'C', "dropLabel");
+    TEST_ASSERT_FALSE(p.hasDropLabel);
+    TEST_ASSERT_EQUAL_STRING("Drop", droplabel::name(false));
+    TEST_ASSERT_EQUAL_STRING("Cooldown", droplabel::name(true));
+}
+
 void test_cooldown_ends_below_et() {
     Cooldown c;
     TEST_ASSERT_FALSE(c.update(20, 60, false)); // not started
@@ -1508,6 +1524,7 @@ int main() {
     RUN_TEST(test_protocol_watchdog);
     RUN_TEST(test_protocol_cooldown_fan);
     RUN_TEST(test_protocol_cooldown_end);
+    RUN_TEST(test_protocol_drop_label);
     RUN_TEST(test_cooldown_ends_below_et);
     RUN_TEST(test_protocol_only_key);
     RUN_TEST(test_protocol_profile);

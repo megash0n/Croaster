@@ -61,6 +61,7 @@ void ControlPlugin::attach(CroasterApp& app, const ControlSettings& settings) {
             data["wifiStrength"] = WiFi.RSSI();
         // Fake readings state for the page's button (Croaster's useDummyData).
         data["dummy"] = app_->core().dummyDataEnabled();
+        data["dropLabel"] = droplabel::name(settings_.dropCooldown);
         if (dataWriter_)
             dataWriter_(data);
     });
@@ -146,6 +147,10 @@ void ControlPlugin::apply(const controlproto::Parsed& p) {
         c.a = p.mainsTrip ? 1 : 0;
         controller_.submit(c);
     }
+    if (p.hasDropLabel && p.dropCooldown != settings_.dropCooldown) {
+        settings_.dropCooldown = p.dropCooldown;
+        ConfigStore::saveDropLabel(p.dropCooldown);
+    }
 }
 
 String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
@@ -173,6 +178,7 @@ String ControlPlugin::handleBasic(const char* name, const JsonObject& json) {
     r["fanAssist"]["max"] = settings_.fanAssistMaxPct;
     if (settings_.mainsTripAvailable) // AC dimmer builds only
         r["mainsTrip"] = settings_.mainsTrip;
+    r["dropLabel"] = droplabel::name(settings_.dropCooldown);
     // Smallest free loop task stack since boot, in bytes (ESP-IDF counts bytes).
     r["loopStackFree"] = uxTaskGetStackHighWaterMark(nullptr);
     return finishReply(doc);

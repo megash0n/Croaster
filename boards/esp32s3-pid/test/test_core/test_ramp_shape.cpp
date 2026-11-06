@@ -95,7 +95,7 @@ void test_shape_parse() {
                              parse(R"({"steps":[{"trigger":{"type":"bt","value":100},"actions":[{"type":"power","value":60,"ramp":60,"shape":"custom","curve":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}]})", r));
     snprintf(text, sizeof text, R"({"steps":[{"trigger":{"type":"bt","value":100},"actions":[{"type":"setpoint","value":200,"curve":%s}]}]})", curve21);
     TEST_ASSERT_EQUAL_STRING("curve needs shape custom", parse(text, r));
-    TEST_ASSERT_EQUAL_STRING("fan does not ramp",
+    TEST_ASSERT_EQUAL_STRING("Exhaust Fan does not ramp",
                              parse(R"({"steps":[{"trigger":{"type":"bt","value":100},"actions":[{"type":"fan","value":60,"ramp":30}]}]})", r));
     TEST_ASSERT_EQUAL_STRING("chargeTemp must be 0..350 C",
                              parse(R"({"chargeTemp":700,"steps":[{"trigger":{"type":"bt","value":100},"actions":[{"type":"fan","value":60}]}]})", r, 'F'));

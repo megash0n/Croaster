@@ -9,7 +9,9 @@ data flow: `docs/how.md`; decisions: `docs/design.md`.
 - `src/hw` — ESP32 drivers (heater SSR, fan dimmer or PWM, thermocouples).
 - `src/app` — the control task, NVS settings and the plugins that connect
   core to Croaster (`ControlPlugin`, `RecipePlugin`, `AutotunePlugin`,
-  `LibraryPlugin`). Every heater, fan, mode or setpoint change goes through
+  `LibraryPlugin`, `AuxFansPlugin`, `RecordsPlugin`). Live data is one
+  `onJsonData` callback; `ControlPlugin::onData` chains later writers.
+  Every heater, fan, mode or setpoint change goes through
   `Controller::submit`, so interlocks, caps and trips apply.
 
 ## Safety

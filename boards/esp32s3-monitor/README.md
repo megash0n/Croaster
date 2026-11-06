@@ -4,7 +4,8 @@ Board `esp32s3-monitor` ("Croaster monitor"): the Croaster PID hardware
 (`boards/esp32s3-pid`) without the heater and fan. It reads ET and BT and
 serves them like every Croaster board: OLED, RoR, roast timer, WebSocket :81,
 BLE and OTA. There is no control task, no heater, fan or mains input, and no
-control commands. Standalone **PlatformIO** project, like every
+control commands. The page hides Controls, so the Drop label stays "Drop".
+Standalone **PlatformIO** project, like every
 `boards/<board>/` folder. It consumes:
 
 | lib_dep | What |

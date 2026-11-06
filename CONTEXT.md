@@ -17,9 +17,9 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 | `boards/esp32s3/` | ES3C28P 2.8" ILI9341 LCD — LVGL 9 UI + FT6336G touch (`src/ui/`) |
 | `boards/esp32s3-pid/` | Croaster PID **control** board (Lonely Binary S3 N16R8): SSR heater, AC-dimmer/PWM fan (always both), 2× MAX31855, OLED; master `src/config.h` + `ConfigCheck.h`; Artisan `.aset` in `artisan/` |
 | `boards/esp32s3-monitor/` | Croaster monitor (same S3 N16R8 hardware, D26): 2× MAX31855 or MAX6675 + OLED, no heater, fan or control task; `src/config.h` (`CMON_` only) + `ConfigCheck.h` |
-| `croaster-control/` | Control add-on lib `CroasterControl` (D1). `src/core/`: pure logic (PID, multi-point autotune `autotune_sequence` + `autotune_protocol` and the older single-point relay, profiles, profile library format, recipe runner, MAX31855/MAX6675 decode, command protocol, safety rules), host tests in `boards/esp32s3-pid/test` (`pio test -e native`). `src/hw/`: ESP32 drivers (thermocouple SPI, SSR, dimmer/PWM fan) and `esp32s3_opi_pins.h` (ESP32-S3 octal-PSRAM pin rules both boards' `ConfigCheck.h` use). `src/app/`: control task, NVS settings, `ControlPlugin` (hooks into `CroasterApp`), `LibraryPlugin` + `library_storage` (profile library on LittleFS), `RecipePlugin` (recipe commands and tick), `AutotunePlugin` (`getAutotune`, apply/discard), `RoasterProbe` (Croaster PID) and `MonitorProbes` (Croaster monitor). `build_filter.py` limits native builds to `src/core` |
+| `croaster-control/` | Control add-on lib `CroasterControl` (D1). `src/core/`: pure logic (PID, multi-point autotune `autotune_sequence` + `autotune_protocol` and the older single-point relay, profiles, profile library format, recipe runner, MAX31855/MAX6675 decode, command protocol, safety rules), host tests in `boards/esp32s3-pid/test` (`pio test -e native`). `src/hw/`: ESP32 drivers (thermocouple SPI, SSR, dimmer/PWM fan) and `esp32s3_opi_pins.h` (ESP32-S3 octal-PSRAM pin rules both boards' `ConfigCheck.h` use). `src/app/`: control task, NVS settings, `ControlPlugin` (hooks into `CroasterApp`), `LibraryPlugin` + `library_storage` (profile library on LittleFS), `RecipePlugin` (recipe commands and tick), `AutotunePlugin` (`getAutotune`, apply/discard), `AuxFansPlugin` (Cooling Fan, FAN1, FAN2), `RecordsPlugin` (saved roasts and beans on LittleFS), `RoasterProbe` (Croaster PID) and `MonitorProbes` (Croaster monitor). `build_filter.py` limits native builds to `src/core` |
 | `croaster-webui/` | Browser UI lib `CroasterWebUi` (D27): `web/` page sources (`theme.js` colour schemes, T50), `embed_assets.py` (library extra script, gzips `web/` into the committed `src/webui_assets.h`), `src/WebUiServer` (ESP-IDF `esp_http_server` on `CMON_WEBUI_PORT`), host tests in `test/` (node + python) |
-| `docs/` | `user-guide.md` (operator guide for Croaster PID on the Behmor: modes, page, autotune, recipes, ramp shapes, trips), `design.md` (architecture + decisions D1–D33), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules, fan test), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source) |
+| `docs/` | `user-guide.md` (operator guide for Croaster PID: modes, page, autotune, recipes, ramp shapes, trips), `design.md` (architecture + decisions D1–D38), `autotune/` (multi-point autotune: goal, process, implementation, tuning rules, fan test), `research/autotune.md` (single-point relay sources, superseded), `tickets.md` (remaining work), `test-plan.md` (functional tests: host, bench or untested), `analysis.md` (yaeger + Croaster review), `how.md` (walkthrough), `architecture.md` (shape + open decisions), `control-parity.md` (yaeger vs ours), `artisan-settings.md` (every `.aset` setting with source), `wiring.md` |
 | `tools/` | Build helpers: `force_include_deps.py` (pre: extra script; force-included `config.h` as a rebuild dependency, T47) |
 | `builds/` | gitignored firmware output of `./build_all.sh` |
 
@@ -29,8 +29,8 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
 | `esp32c3` | ESP32-C3 | 128×64 SSD1306 | `esp32c3` | ~85.7% |
 | `esp8266` | ESP8266 | 128×64 SSD1306 | `esp8266` | ~39.8% |
 | `esp32s3` (ES3C28P) | ESP32-S3 | 320×240 ILI9341 + LVGL 9 | `esp32s3` | ~29.0% |
-| `esp32s3-pid` | ESP32-S3 N16R8 | 0.96" 128×64 SSD1306 I2C (`boards/common` display; confirmed by Shawn) | `esp32s3-pid` | 30.3% (1 988 047 B), RAM 63 168 B (2026-10-31, T60) |
-| `esp32s3-monitor` | ESP32-S3 N16R8 | same as `esp32s3-pid` | `esp32s3-monitor` | 26.7% (1 751 995 B), RAM 54 712 B (2026-10-31, T60) |
+| `esp32s3-pid` | ESP32-S3 N16R8 | 0.96" 128×64 SSD1306 I2C (`boards/common` display; confirmed by Shawn) | `esp32s3-pid` | 32.6% (2 136 126 B), RAM 67 080 B (2026-11-06, T66) |
+| `esp32s3-monitor` | ESP32-S3 N16R8 | same as `esp32s3-pid` | `esp32s3-monitor` | 27.2% (1 780 739 B), RAM 54 720 B (2026-11-06, T66) |
 
 ## How a board is wired
 - `main.cpp` creates `CroasterCore core(dummyMode, pins)`, a display subclass
@@ -236,9 +236,13 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   `library.json`).
 
 ## Next steps
-- Flash D37 build and confirm Cooling Fan / Exhaust Fan labels, Cooling Fan
-  enable, and Drop-as-Cooldown on the Live page (build flags already on in
-  `boards/esp32s3-pid/platformio.ini`).
+- Bench D38 (`docs/test-plan.md` "Drop label, cooldown and storage"): Drop
+  label survives reboot and a second browser; Exhaust Fan and Cooling Fan
+  on STOP and on a trip; both stop when ET ends the cooldown; Cooling Fan
+  stays off in preheat and when disabled. Sizes are in T66.
+- Bean stock is not one transaction with the roast file (D38). A failed
+  stock write after a successful roast save is not retried for the same
+  bean and green weight.
 - Croaster PID: hardware bring-up and the rest of `docs/tickets.md` (T2–T14).
 - Update the ICRM app's `lib_deps` for the `croaster/` subfolder.
 - Flash + verify the esp32s3 build on real hardware (touch, chart swipe,
@@ -262,7 +266,11 @@ Flutter app (remote `git@github.com:IiemB/Croaster.git`) and is consumed via
   definitions.
 - `ControlPlugin::onData` chains writers. A second `onData` used to replace
   the first, so `RecipePlugin::attach` dropped `AuxFansPlugin::writeData` and
-  the Live page never saw Cooling Fan / FAN1 / FAN2 (D37).
+  the Live page never saw Cooling Fan / FAN1 / FAN2 (D37). `CroasterCore`
+  still holds one `onJsonData` callback; another one would drop the chain.
+- The Drop/Cooldown name is NVS `control`/`dropCd` (D38), not the browser.
+  Setpoint 0 is off: fan assist does not treat it as 0 °C. A roast save
+  that fails after pruning still lists the deleted ids.
 - `onJsonCommand(key, fn)`: every registered callback gets the **whole**
   `command` object when its key is present; parse only your own key.
 - Croaster's handler ignores messages without a `"command"` member, so

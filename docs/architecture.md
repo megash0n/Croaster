@@ -175,14 +175,16 @@ Taken from Croaster: everything about connectivity, display and boards.
    configurable, can be off) the behaviour you want, or yaeger's instant cut
    on disconnect as well?
 4. D8: resolved 2026-10-26, flat keys and the `onOtherJson` hook dropped.
-5. Cooldown fan default: 100 % (ours) or 65 % (yaeger)?
+5. Cooldown fan default: resolved by D19. Exhaust Fan 65 % after stop,
+   100 % when a trip starts. Cooldown ends when ET is below the saved end
+   temperature (60 °C / 140 °F).
 6. D10: how the Croaster PID board's `platformio.ini` relates to Croaster's
    `boards/esp32s3` (standalone, `extends` his env, or a shared chip-level base
    ini). See design.md.
 7. D11: resolved 2026-10-27, one decoder in `croaster-control/src/core`;
    `croaster/` reads MAX6675 only, as upstream.
-8. D13: is typing the IP into Artisan fine, or add `ESPmDNS` for
-   `croaster-flex.local`?
+8. D13: is typing the IP into Artisan fine, or add `ESPmDNS`? No hostname
+   is chosen. The old `croaster-flex` name is retired (D25).
 9. D14: config wizard as a Python script (recommended) or another option?
 
 Resolved: D5, board id `esp32s3-flex` (Shawn, 2026-10-26); D25, renamed to

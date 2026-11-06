@@ -47,7 +47,10 @@ Pages from before this setting stored `"dark"` or `"light"`; `"dark"` moves
 to Neon and `"light"` to Light.
 
 The roast clock, events and samples live in the browser (`localStorage`), not
-on the board. A reload keeps them; another browser does not see them.
+on the board. A reload keeps them; another browser does not see them. The
+Drop/Cooldown name is a board setting (`dropLabel`), so every browser on
+that board shows the same one. The page removes the old
+`croaster.dropLabel` browser value and does not copy it onto the board.
 
 ## Security
 

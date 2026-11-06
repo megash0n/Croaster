@@ -1,5 +1,10 @@
 # To-Implement: Build-time hardware selection
 
+Superseded for thermocouples. Croaster PID and Croaster monitor choose
+MAX31855 or MAX6675 in each board's `config.h` (`docs/design.md` D11, D21,
+D26). `croaster/` still builds the upstream MAX6675 path. The note below is
+the earlier proposal and is not the current layout.
+
 This note describes a small refactor for the Croaster fork. The goal is to let a board choose its thermocouple (and later other hardware) at build time without scattering `#ifdef` blocks through the library.
 
 ## Current layout

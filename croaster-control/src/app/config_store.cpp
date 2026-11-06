@@ -23,6 +23,7 @@ ControlSettings ConfigStore::load(const ControlSettings& d) {
     s.watchdog.timeoutS = p.getUShort("wdS", d.watchdog.timeoutS);
     s.fanAssist = p.getBool("fanAs", d.fanAssist);
     s.mainsTrip = p.getBool("mainsOn", d.mainsTrip);
+    s.dropCooldown = p.getBool("dropCd", d.dropCooldown);
     p.end();
     return s;
 }
@@ -72,6 +73,13 @@ void ConfigStore::saveMainsTrip(bool on) {
     Preferences p;
     p.begin(kNs, false);
     p.putBool("mainsOn", on);
+    p.end();
+}
+
+void ConfigStore::saveDropLabel(bool cooldown) {
+    Preferences p;
+    p.begin(kNs, false);
+    p.putBool("dropCd", cooldown);
     p.end();
 }
 

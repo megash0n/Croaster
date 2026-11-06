@@ -151,10 +151,13 @@ device settings (unit, corrections) and maintenance.
    them.
 5. **Stop.** STOP in the top bar asks for confirmation, then turns the
    heater off, switches the board to Manual (ending PID, a profile, a recipe
-   or autotune), sets the setpoint off, sets the cooldown fan and ends the
-   recording. End roast asks the same way and does the same.
+   or autotune), sets the setpoint off, sets the Exhaust Fan to the cooldown
+   speed, turns the Cooling Fan on and ends the recording. End roast asks
+   the same way and does the same.
    Drop is the end of heating: it marks Drop, then asks whether to end the
-   roast now (Cancel keeps heating; Drop stays marked). The save dialog
+   roast now (Cancel keeps heating; Drop stays marked). Controls > Safety
+   can name that button Cooldown; the event and the logic stay the same,
+   and the name is saved on the board (default Drop). The save dialog
    opens once per roast: at Drop or End roast, else after STOP or when the
    cooldown ends.
 6. **Keep or clear.** Download CSV saves the samples and events. Clear roast
@@ -223,8 +226,8 @@ Ki and Kd side by side, and the fan test results if it ran.
 ### What the fan test measures
 
 The fan test is an optional last stage of autotune, ticked by default. At
-the middle point (300 °F, 149 °C) the board holds BT steady at fan 30, 60
-and 90 % and records, at each level:
+the middle point (300 °F, 149 °C) the board holds BT steady at Exhaust Fan
+30, 60 and 90 % and records, at each level:
 
 - the heater needed to hold the temperature (more airflow needs more heat);
 - the BT dip and recovery time after the fan steps up;
@@ -402,14 +405,14 @@ takes the steepest rate the shape asks for, finds the temperature where
 that happens, and compares it with the most the model says your roaster can
 climb there at that fan with the heater at its ceiling. If the ramp asks
 for more, a warning appears under the step, for example "Needs 30 °F/min
-near 380 °F; the saved autotune model gives about 22 °F/min at fan 40 %."
+near 380 °F; the saved autotune model gives about 22 °F/min at Exhaust Fan 40 %."
 Lengthen the ramp, lower the fan or pick a flatter shape.
 
 ### On Live
 
 While a setpoint ramp runs, Live draws the rest of the plan as a dashed
 setpoint line and shows a line such as "Setpoint ramp 300 °F → 390 °F,
-front, 0:40 of 4:00." The behind-schedule warning follows the shaped plan.
+front curve, 0:40 of 4:00." The behind-schedule warning follows the shaped plan.
 
 ### What the shapes do to BT
 
@@ -493,15 +496,29 @@ mode again. If the cause is still there, the trip comes back at once.
 
 ### Cooldown
 
-After STOP, Heater off, or a recipe Cool step, the heater goes off, the
-board switches to Manual and the fan runs at the cooldown speed: 65 % by
-default. After a trip it runs at the trip speed: 100 % by default. Both are
-set in Controls > Safety > Cooldown fan and survive a reboot.
+After STOP, End roast, Heater off, or a recipe Cool step, the heater goes
+off, the board switches to Manual and the Exhaust Fan runs at the cooldown
+speed: 65 % by default. After a trip, including lost mains, it runs at the
+trip speed: 100 % by default. The Cooling Fan (the chamber scroll blower)
+comes on with that cooldown and does not run during preheat. Both speeds
+and the temperature that ends the cooldown are set in Controls > Safety and
+survive a reboot. The Cooling Fan can be turned off there; that is saved
+too.
 
-The cooldown fan stays at that speed until you change it. The board does not
-end cooldown on its own; for example, it does not stop the fan when ET falls
-below a temperature. Watch the beans and turn the fan down when they are
-cool.
+The cooldown ends on its own when ET falls below the end temperature
+(140 °F / 60 °C by default). The Exhaust Fan then goes to 0 % and the
+Cooling Fan turns off. A missing ET reading does not end it. Changing the
+Exhaust Fan, the mode, or turning the heater back on also ends it. Heater
+off during cooldown does not.
+
+### Electronics fans
+
+Controls > Safety sets the turn-on temperatures for the case fan (FAN1) and
+the ESP fan (FAN2), and a box-temperature warning. FAN1 uses the thermocouple
+chip's internal temperature when the probe is a MAX31855; a MAX6675 has no
+internal reading, and either fan then uses the ESP chip temperature. No
+reading leaves the fan on. Live can force each fan Auto, On or Off; that
+choice is not saved and returns to Auto after a reboot.
 
 ## Units
 

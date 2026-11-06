@@ -82,10 +82,31 @@ void test_dummy_state_in_data() {
     const std::string plugin = readSource("croaster-control/src/app/ControlPlugin.cpp");
     const std::string hook = between(plugin, "app.core().onJsonData(", "});");
     TEST_ASSERT_NOT_EQUAL(std::string::npos, hook.find("data[\"dummy\"] = app_->core().dummyDataEnabled();"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, hook.find("data[\"dropLabel\"] = droplabel::name(settings_.dropCooldown);"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, hook.find("if (dataWriter_)"));
+}
+
+// CroasterCore::onJsonData keeps one callback. ControlPlugin owns it and chains
+// later writers, so AuxFansPlugin and RecipePlugin both add fields.
+void test_data_writers_are_chained() {
+    const std::string header = readSource("croaster-control/src/app/ControlPlugin.h");
+    const std::string onData = between(header, "void onData(", "private:");
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, onData.find("prev(data);"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, onData.find("fn(data);"));
+    const std::string main = readSource("boards/esp32s3-pid/src/main.cpp");
+    const size_t aux = main.find("auxFans.writeData(data);");
+    const size_t recipes = main.find("recipes.attach(app);");
+    TEST_ASSERT_TRUE(aux != std::string::npos && recipes != std::string::npos && aux < recipes);
+    const std::string recipe = readSource("croaster-control/src/app/RecipePlugin.cpp");
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, recipe.find("control_.onData("));
+    TEST_ASSERT_EQUAL(std::string::npos, recipe.find("onJsonData"));
+    const std::string core = readSource("croaster/src/CroasterCore.cpp");
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, core.find("jsonDataExtension = fn;"));
 }
 
 void runDummyTests() {
     RUN_TEST(test_dummy_readings_use_display_unit);
     RUN_TEST(test_dummy_reading_ranges);
     RUN_TEST(test_dummy_state_in_data);
+    RUN_TEST(test_data_writers_are_chained);
 }

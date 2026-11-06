@@ -18,6 +18,9 @@ Croaster adalah firmware open-source untuk mikrokontroler berbasis ESP8266 dan E
 |:---|:---:|:---:|:---:|:---:|
 | NodeMCU ESP8266 | ✅ | ❌ | ✅ | ❌ |
 | ESP32C3 Super Mini | ✅ | ✅ | ✅ | ✅ |
+| ESP32-S3 Croaster PID (`boards/esp32s3-pid`) | ✅ | ✅ | ✅ | ✅ |
+| ESP32-S3 Croaster monitor (`boards/esp32s3-monitor`) | ✅ | ✅ | ✅ | ✅ |
+| ESP32-S3 layar sentuh (`boards/esp32s3`) | ✅ | ✅ | ✅ | ✅ |
 
 ---
 

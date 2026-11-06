@@ -11,9 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Cooling Fan enable (D37).** Controls > Safety can turn the Cooling Fan
   (scroll relay) off; saved on the board, default on. Hidden when
   `CPID_SCROLL_FAN` is off.
-- **Drop event as Cooldown (D37).** Controls > Safety can show the Drop
+- **Drop event as Cooldown (D37, D38).** Controls > Safety can show the Drop
   button and labels as "Cooldown" for drum-cool setups; logic unchanged,
-  default remains Drop.
+  default remains Drop. The name is saved on the board (`dropLabel`), not
+  in the browser.
 - **End of roast (D35).** End roast asks as STOP does and ends the roast
   the same way: heater off, recipe aborted, Manual, cooldown fan, recording
   ends. Drop marks the event, then offers to end the roast. The save dialog
@@ -24,6 +25,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   it off needs a danger confirmation.
 
 ### Changed
+- **Fan assist ignores an off setpoint (D38).** Setpoint 0 is off, not a
+  target of 0 °C. Fan assist no longer raises the Exhaust Fan while idle
+  at room temperature.
+- **A failed roast save names roasts it deleted (D38).** When storage is
+  full and the new file still cannot be written, the reply lists the ids
+  already removed and the page refreshes the list.
+- **Sizes (D38).** Croaster PID RAM 67 080 B, flash 2 136 126 B. Croaster
+  monitor RAM 54 720 B, flash 1 780 739 B. Page 80 777 B gzipped.
 - **Exhaust Fan / Cooling Fan names (D37).** The main roast fan is labelled
   Exhaust Fan in the page (tiles, controls, confirmations, logs). The scroll
   relay is Cooling Fan. It runs on STOP, End roast, every safety trip and

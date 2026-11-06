@@ -326,7 +326,10 @@ New 2026-10-31, open for Shawn:
 | D32 | Setpoint ramps start at the PID input (BT) when the step applies, with a bumpless PID restart. |
 | D33 | Fake readings button is green while dummy mode is on, from a `dummy` data field. |
 | D34 | Optional scroll fan, case fan (FAN1), ESP fan (FAN2) and box temperature. |
+| D35 | End roast: one confirmation, cooldown, recipe end, roast save. |
+| D36 | Mains trip on or off, saved on the board. |
 | D37 | Exhaust Fan / Cooling Fan names, Cooling Fan enable, Drop-as-Cooldown label, recipe log times, aux onData chain. |
+| D38 | Drop label in NVS; fan assist ignores an off setpoint; a failed roast save reports roasts it deleted. |
 
 ### D1. Where the control libraries live — resolved 2026-10-27: one library, `croaster-control/`
 Shawn chose one top-level library next to `croaster/`, split by purpose into
@@ -1806,8 +1809,8 @@ Cooldown without changing the event code.
   flag is off or the setting is off. Engages on STOP, End roast, every
   safety trip and cooldown; never in preheat; shares the Exhaust Fan's ET
   cooldown-end.
-- **Drop as Cooldown.** Page-only setting (`croaster.dropLabel`); default
-  Drop. Same `DROP` event and end-of-roast logic.
+- **Drop as Cooldown.** Same `DROP` event and end-of-roast logic. The
+  label is stored on the board (D38), not in the browser.
 - **Recipe Live log.** `firedText` was slicing on the first `:` in a time
   trigger (`0:10`), producing doubled clocks (`0:10:10`). It now splits on
   `):`. Ramp shape `front` reads as "front curve".
@@ -1817,3 +1820,48 @@ Cooldown without changing the event code.
   `cooldownFan.stop` (65 % default) via `ControlPlugin::stop` →
   `Command::Stop` with `b = 1`. `nomains` uses the same trip-fan / cooldown
   path as the other safety trips (`tripFan_` / `cooldownFan.trip`).
+
+### D38. Drop label on the board, and two control fixes — new 2026-11-06, open for Shawn
+
+The Drop/Cooldown name follows the board, the same way the Cooling Fan
+enable and the fan turn-on temperatures do: NVS, a command, reported in the
+data the page already reads. Not a `config.h` flag. Default remains Drop.
+
+- **Storage.** Namespace `control`, key `dropCd` (bool, default false).
+  `{"command":{"dropLabel":"Drop"|"Cooldown"}}`. Anything else is ignored
+  and not saved. `getControl` and every data payload carry `dropLabel`
+  (`"Drop"` or `"Cooldown"`). The page sends the command when the Safety
+  radios change and drops `croaster.dropLabel` from browser storage. A
+  browser that had already chosen Cooldown needs the control set once;
+  after that every browser on this board shows the same name.
+- **Names pending confirmation:** command and fields `dropLabel`; NVS key
+  `dropCd`; the two strings `Drop` and `Cooldown`. The event code stays
+  `DROP`.
+- **Fan assist and an off setpoint.** Setpoint 0 means the heater is off,
+  not a target of 0 °C (which would read 32 °F). Fan assist now stays at
+  zero unless the setpoint is above 0, in PID or Profile, as it already
+  does in Manual, during a trip and during autotune. The displayed SV was
+  already 0 in every unit (`setpointIn`).
+- **Roast save when the filesystem is full.** If a write fails, the store
+  deletes the oldest roast once and retries. When the retry also fails,
+  that roast is already gone. `roastSave` now includes `pruned` on the
+  error reply, and the page names the ids and refreshes the list.
+- **Checked and left as they are.** Cooling Fan follows `Snapshot::cooling`
+  (STOP, End roast, recipe Cool, emergency off, every trip including
+  `nomains`) and stops when ET ends the Exhaust Fan cooldown. It does not
+  run in preheat. Manual does what is set; a fan, mode or heater-on command
+  cancels the cooldown. Box temperature is the MAX31855 cold junction only
+  (MAX6675 has none and falls back to the chip). FAN1/FAN2 hysteresis and
+  the missing-reading-runs rule are unchanged. Live-data writers stay
+  chained: `CroasterCore::onJsonData` still holds one callback, and
+  `ControlPlugin::onData` runs AuxFans then Recipe. Recipe time triggers
+  split on `):`, and shape `front` reads as "front curve" in the step text
+  and on the Live ramp line.
+- **Left alone.** A roast file is written before bean stock moves. If the
+  stock write fails, a later save of the same bean and green weight does
+  not try again. Making that one transaction would change the record.
+  Deleting or pruning a roast still does not return stock. Autotune does
+  not measure a second fan. No bean-reference catalog was added.
+- **Sizes.** `esp32s3-pid` RAM 67 080 B (unchanged), flash 2 136 126 B
+  (+1 716). `esp32s3-monitor` RAM 54 720 B (unchanged), flash 1 780 739 B
+  (+224, the page). Page 80 777 B gzipped (+231).

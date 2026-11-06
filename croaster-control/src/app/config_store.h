@@ -15,6 +15,7 @@ struct ControlSettings {
     float fanAssistMaxPct = 20;       // CPID_FAN_ASSIST_MAX (not stored)
     bool mainsTrip = false;           // nomains trip; default from config.h (CPID_REQUIRE_MAINS)
     bool mainsTripAvailable = false;  // AC dimmer build: the setting applies (not stored)
+    bool dropCooldown = false;        // Drop event labelled "Cooldown" (NVS "dropCd"); default Drop
 };
 
 namespace ConfigStore {
@@ -25,6 +26,7 @@ void saveCooldownFan(const CooldownFan& c);
 void saveWatchdog(const WatchdogSettings& w);
 void saveFanAssist(bool on);
 void saveMainsTrip(bool on);
+void saveDropLabel(bool cooldown); // true: the page shows "Cooldown" for the DROP event
 // Autotune's roaster model (saved with the gains). load returns false when none
 // is saved or it was saved by a different layout (roastermodel::kVersion).
 void saveModel(const roastermodel::RoasterModel& m);

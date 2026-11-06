@@ -1060,6 +1060,7 @@ void test_fan_assist_bounds() {
     TEST_ASSERT_TRUE(a.update(st, profile, 0.25f) > 0);
     // On by default; the controller enables it only with a saved fan test.
     TEST_ASSERT_TRUE(ControlSettings{}.fanAssist);
+    TEST_ASSERT_FALSE(ControlSettings{}.dropCooldown);
     fanassist::Inputs tuning = in;
     tuning.mode = Mode::Autotune;
     TEST_ASSERT_EQUAL_FLOAT(0, a.update(st, tuning, 0.25f));
@@ -1072,6 +1073,18 @@ void test_fan_assist_bounds() {
     fanassist::Assist b;
     for (int i = 0; i < 400; i++)
         TEST_ASSERT_EQUAL_FLOAT(0, b.update(st, under, 0.25f));
+    // Setpoint 0 is off, not a target of 0 C. Room temperature must not raise the fan.
+    fanassist::Inputs idle = in;
+    idle.setpointC = 0;
+    idle.btC = 25;
+    idle.heaterPct = 0;
+    fanassist::Assist offTarget;
+    for (int i = 0; i < 40; i++)
+        TEST_ASSERT_EQUAL_FLOAT(0, offTarget.update(st, idle, 0.25f));
+    for (int i = 0; i < 40; i++)
+        a.update(st, in, 0.25f);
+    TEST_ASSERT_TRUE(a.extra() > 0);
+    TEST_ASSERT_EQUAL_FLOAT(0, a.update(st, idle, 0.25f));
 
     // On the drum: BT 15 C above a lowered setpoint with the heater at 0;
     // assist brings BT to the path sooner.

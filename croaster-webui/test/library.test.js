@@ -51,7 +51,7 @@ test('recipeReason matches the board limits', () => {
     [r({ type: 'drum', value: 1 }), 'trigger type must be time, bt, et, ror or event'],
     [r({ type: 'time', value: 1 }, []), 'a step has 1 to 4 actions'],
     [r({ type: 'time', value: 1 }, Array(5).fill({ type: 'end' })), 'a step has 1 to 4 actions'],
-    [r({ type: 'time', value: 1 }, [{ type: 'power', value: 101 }]), 'power and fan must be 0..100 %'],
+    [r({ type: 'time', value: 1 }, [{ type: 'power', value: 101 }]), 'power and Exhaust Fan must be 0..100 %'],
     [r({ type: 'time', value: 1 }, [{ type: 'setpoint', value: 400 }]), 'setpoint must be 0..350 C'],
     [r({ type: 'time', value: 1 }, [{ type: 'setpoint', value: 200, ramp: 3601 }]), 'ramp must be 0..3600 s'],
     [r({ type: 'time', value: 1 }, [{ type: 'drum', value: 50 }]), 'action type must be power, fan, setpoint, hold, cool, end or note'],
@@ -84,7 +84,7 @@ test('editor rows round trip, with unit conversion', () => {
   assert.equal(L.recipeToEditor({ steps: [{ trigger: { type: 'ror', value: 18, op: 'near', tol: 9 }, actions: [] }] }, 'F', 'C')[0].tol, 5);
   // a blank value is named by validation
   rows[0].actions[0].value = '';
-  assert.equal(L.recipeReason(L.recipeFromEditor(rows, 'auto'), 'F'), 'power and fan must be 0..100 %');
+  assert.equal(L.recipeReason(L.recipeFromEditor(rows, 'auto'), 'F'), 'power and Exhaust Fan must be 0..100 %');
   // fromEditor without a schedule
   const out = L.fromEditor(null, 'Recipe only', '', 'F', { future: 1 }, rec);
   assert.equal(out.error, undefined);
@@ -92,12 +92,12 @@ test('editor rows round trip, with unit conversion', () => {
   assert.equal(out.profile.future, 1);
   const badOut = L.fromEditor(null, 'x', '', 'F', null, L.recipeFromEditor(rows, 'auto'));
   assert.equal(badOut.error, 'badRecipe');
-  assert.equal(badOut.reason, 'power and fan must be 0..100 %');
+  assert.equal(badOut.reason, 'power and Exhaust Fan must be 0..100 %');
 });
 
 test('describeStep reads like the Live list', () => {
   const rec = recipe();
-  assert.equal(L.describeStep(rec, 0, 'F', 'F'), 'Step 1 (BT \u2265 389 \u00b0F): exhaust fan 50 %, power 60 %');
+  assert.equal(L.describeStep(rec, 0, 'F', 'F'), 'Step 1 (BT \u2265 389 \u00b0F): Exhaust Fan 50 %, power 60 %');
   const t = { steps: [{ trigger: { type: 'time', value: 462 }, label: 'Late', actions: [{ type: 'setpoint', value: 220, ramp: 90 }, { type: 'cool' }] }] };
   assert.equal(L.describeStep(t, 0, 'C', 'C'), 'Step 1 Late (time \u2265 7:42): setpoint 220 \u00b0C over 1:30, cool');
   assert.equal(L.describeStep({ steps: [{ trigger: { type: 'event', value: 'FC_START' }, actions: [{ type: 'note', text: 'hi' }] }] }, 0, 'C', 'C'),
