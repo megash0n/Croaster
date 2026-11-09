@@ -7,9 +7,11 @@ namespace fanassist {
 
 float Assist::update(const Settings& s, const Inputs& in, float dtS) {
     const bool controlled = in.mode == Mode::Pid || in.mode == Mode::Profile;
-    // Safety paths own the fan: clear at once, no ramp.
+    // Safety paths own the fan: clear at once, no ramp. Setpoint 0 is off
+    // (no target), not 0 C: assisting against it would treat room temperature
+    // as above the path and raise the fan while idle.
     if (!s.enabled || !controlled || in.trip != SafetyTrip::None || !std::isfinite(in.btC) ||
-        !std::isfinite(in.setpointC) || !(s.maxExtraPct > 0)) {
+        !(in.setpointC > 0) || !(s.maxExtraPct > 0)) {
         extra_ = 0;
         return 0;
     }

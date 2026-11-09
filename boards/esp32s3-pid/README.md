@@ -145,12 +145,16 @@ it. The change is saved, so the board boots in that unit from then on. Limits an
 | JSON | Effect |
 |:---|:---|
 | `{"command":{"burner":0..100}}` | heater %, manual mode |
-| `{"command":{"fan":0..100}}` | fan % |
+| `{"command":{"fan":0..100}}` | Exhaust Fan % |
 | `{"command":{"setpoint":T}}` | PID setpoint |
 | `{"command":{"mode":"manual"\|"pid"}}` | mode (`pid` needs tuned gains, see Autotune) |
 | `{"command":{"pidInput":"ET"\|"BT"\|"MAX"}}` | PID input (saved; default BT, `CPID_PID_INPUT`; a saved value wins over the default) |
 | `{"command":{"pid":{"kp":..,"ki":..,"kd":..}}}` | gains (saved; counts as tuned) |
-| `{"command":{"cooldownFan":{"stop":0..100,"trip":0..100}}}` | fan after `stop` (default 65) and when any safety trip starts (default 100); either field alone works; a plain number sets `stop` (saved) |
+| `{"command":{"cooldownFan":{"stop":0..100,"trip":0..100,"end":T}}}` | Exhaust Fan after `stop` (default 65) and when any safety trip starts (default 100); `end` is the ET that ends the cooldown (default 140 °F / 60 °C); either field alone works; a plain number sets `stop` (saved) |
+| `{"command":{"fanAssist":true\|false}}` | fan assist on or off (saved; PID and Profile only, and only while the setpoint is above 0) |
+| `{"command":{"mainsTrip":true\|false}}` | `nomains` trip on or off (saved; AC dimmer builds) |
+| `{"command":{"auxFans":{"fan1On":C,"fan2On":C,"boxWarn":C,"scrollEn":bool,"fan1":"auto"\|"on"\|"off","fan2":..}}}` | case/ESP fan thresholds and warning (saved), Cooling Fan enable (saved, default on), and live Auto/On/Off overrides (not saved) |
+| `{"command":{"dropLabel":"Drop"\|"Cooldown"}}` | name of the Drop event on the page (saved; default Drop; logic unchanged) |
 | `{"command":{"watchdog":{"enabled":bool,"timeout":s}}}` | comms watchdog on/off and timeout, 2..600 s (saved; either field alone works) |
 | `{"command":{"profile":[{"duration":s,"setpoint":T,"interpolation":"ease-out","fanValue":%}]}}` | load profile: 1 to 32 steps, duration above 0 and up to 3600 s, setpoint -50 to 1000 °C (in the current unit), `fanValue` 0..100 optional; replies `{"command":"profile","response":{"loaded":bool,"steps":n}}` |
 | `{"command":"startProfile"}` / `"stop"` / `"autotune"` / `"clearTrip"` / `"getControl"` | actions / query (autotune: see Autotune below; `getAutotune`, `{"autotune":"apply"\|"discard"}`) |
@@ -196,8 +200,10 @@ yaeger's flat keys (`{"BurnerVal":v}` without `"command"`) are not accepted.
 
 Data broadcasts gain `BurnerVal`, `FanVal`, `SV`, `Mode`, `trip`, `autotune`,
 `Amb`, `Target`, `pidKp`/`pidKi`/`pidKd`, `wifiStrength`, `dummy` (fake
-readings on), and `atTarget` (the
-autotune test point) during autotune. `autotune` holds the last autotune
+readings on), `dropLabel` (`Drop` or `Cooldown`), `FanAssist` (extra Exhaust
+Fan % from fan assist), `cooling` (cooldown in progress), `aux` (Cooling Fan
+and the electronics fans, when built), `recipe` once a recipe is loaded, and
+`atTarget` (the autotune test point) during autotune. `autotune` holds the last autotune
 status in the display unit: `idle`, `running: heating to 300 F (1/3)`,
 `running: cycle 3/6 at 350 F (2/3)`, `results ready`, `done`, `discarded`,
 `failed: no heat-up`, `aborted: stop`, `need a valid probe`,

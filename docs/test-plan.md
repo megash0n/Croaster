@@ -321,6 +321,11 @@ Bench run:
 - `cooldownFan` as a number or `{"stop","trip"}` object, range 0..100, both in `getControl`. **host** `test_protocol_cooldown_fan`
 - `{"command":{"cooldownFan":{"trip":80}}}` then a comms trip → fan 80 %, survives reboot. **untested**
 - `{"command":{"cooldownFan":65}}` then Stop → fan 65 %, survives reboot. **untested**
+- Cooldown ends when ET is below the end temperature; a missing ET does not end it; fan, mode or heater-on cancels it. **host** `test_protocol_cooldown_end`
+- Cooling Fan follows that cooldown, stays off when disabled, and a manual on/off applies only while idle. **host** `test_scroll_fan_follows_cooldown`, `test_scroll_fan_disabled_stays_off`, `test_scroll_fan_manual_only_when_idle`
+- `{"command":{"dropLabel":"Cooldown"}}` sets the label; `"Drop"` clears it; other values are ignored. Default is Drop. **host** `test_protocol_drop_label`
+- Aux fans and the recipe both write live data: AuxFans is registered before RecipePlugin, and `onData` runs the previous writer then the new one. **host** `test_data_writers_are_chained`
+- A roast save that fails after deleting an older roast reports those ids, and the files are gone. **host** `test_roasts_keep_the_newest`
 
 ## Mains detection
 - `CPID_REQUIRE_MAINS 1`, no AC → heat refused, `trip:"nomains"`. **bench 2026-10-26** (before the grace period; bench todo: trip now comes about 2 s after heat is set)
@@ -339,7 +344,7 @@ Bench run:
 
 ## Setpoint caps
 - Setpoint above 482 °F (250 °C) → SV capped at 482 °F. **untested** (cap is in the controller, not host-tested)
-- Negative setpoint → SV 0 °C (32 °F). **untested**
+- Setpoint 0 or below → SV reads 0 in every unit (off, not 32 °F). Fan assist stays at 0. **host** `test_protocol_cooldown_end`, `test_fan_assist_bounds`
 
 ## Profiles
 - README example profile → setpoints follow the ramps. **host** `test_profile_matches_readme_example`
@@ -358,3 +363,37 @@ Bench run:
 - Correction change during autotune → `autotune` "aborted: correction changed", OLED "AT abort: offset", heater 0. **host** (text, `test_autotune_status_text`); bench untested
 - Correction change in PID → heater output continues without a jump. **untested**
 - Stock boards (`esp32c3`, `esp8266`) → same RAM and flash use and the same warnings with the getters added. **build 2026-10-26**
+
+## Drop label, cooldown and storage (D38)
+
+Host checks are listed under Stop and cooldown and Setpoint caps.
+
+Bench, Croaster PID, flags already on in `platformio.ini`:
+
+1. Fresh or erased NVS: Controls > Safety shows Drop. Choose Cooldown.
+   Reload the page and open it from another browser: both show Cooldown.
+   Reboot the board: still Cooldown. Choose Drop again and reboot: Drop.
+2. A browser that previously stored Cooldown only in the page shows Drop
+   until it is set once on the board.
+3. End roast (or STOP) with beans in the drum: Exhaust Fan goes to the
+   cooldown % (65 % unless changed), Cooling Fan relay clicks on, heater
+   is off, mode Manual. Preheat (heater on, before Charge) does not run
+   the Cooling Fan.
+4. Let ET fall below the cooldown end (140 °F unless changed): Exhaust Fan
+   goes to 0 % and the Cooling Fan turns off without another command.
+   Unplug ET during cooldown: the fans stay on.
+5. During cooldown, set the Exhaust Fan by hand: cooldown ends and the fan
+   stays at the value you set. Repeat a stop, then turn the heater on:
+   cooldown ends.
+6. Safety trip (for example mains removed while heating, with Mains trip
+   on): Exhaust Fan 100 %, Cooling Fan on, heater off. Same ET end as a
+   normal cooldown.
+7. Controls > Safety, Cooling Fan off, then STOP: Exhaust Fan still cools;
+   the scroll relay stays off. Turn Cooling Fan back on.
+8. Fill roast storage until a save has to delete an older roast, then
+   force a failed write if you can (full filesystem). The page should name
+   the deleted roast and the new roast should be absent. If you cannot
+   fill the filesystem, skip this and rely on the host test.
+9. Idle, setpoint off, PID mode, BT near room temperature, fan assist on
+   with a saved fan test: Fan assist stays 0. A real setpoint above BT
+   with the heater at 0 should still be able to add fan.

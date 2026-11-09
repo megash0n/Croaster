@@ -6,6 +6,8 @@
 
 **Versi Firmware Saat Ini:** `0.52`
 
+Fork ini juga membangun **Croaster PID** (`boards/esp32s3-pid`: pemanas, Exhaust Fan, Cooling Fan, PID, resep) dan **Croaster monitor** (`boards/esp32s3-monitor`: probe dan halaman). Catatan operator ada di `docs/user-guide.md`; kabel di `docs/wiring.md`; keputusan di `docs/design.md`. Board monitor bawaan di bawah tidak diubah.
+
 ---
 
 ## 📑 Daftar Isi

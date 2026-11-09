@@ -79,7 +79,8 @@ In PID and Profile the heater also gets feedforward from the roaster model
 autotune saved: the extra heat the current fan speed needs, and the heat a
 moving setpoint needs. The fan is the user's or recipe's value (the base),
 the fan test's level during autotune, or the base plus fan assist when BT
-runs above the setpoint with the heater already off
+runs above the setpoint with the heater already off. Fan assist stays off
+when the setpoint is off (0), in Manual, during a trip and during autotune
 (`docs/autotune/fan-test.md`).
 
 The SSR is a zero-cross type, so it can only switch at whole mains
@@ -248,15 +249,21 @@ settings; see the board README, "Comms watchdog".
 500 ms on the controller snapshot. Flags in `config.h`, default 0, set to 1 in
 `platformio.ini` with `-D` (the `#ifndef` guards let the flag win over the
 force-included `config.h`):
-- `CPID_SCROLL_FAN` (GPIO 7, relay): on while `Snapshot::cooling`, plus a
-  manual on/off when idle (Manual, heater 0, no cooldown). The manual request
-  ends when a cooldown starts, the heater comes on or the mode changes.
+- `CPID_SCROLL_FAN` (GPIO 7, relay, Cooling Fan): on while
+  `Snapshot::cooling` (STOP, End roast, recipe Cool, every trip including
+  lost mains), never during preheat. It stops when ET ends the Exhaust Fan
+  cooldown. Manual on/off only while idle (Manual, heater 0, no cooldown);
+  that request ends when a cooldown starts, the heater comes on or the mode
+  changes. `{"command":{"auxFans":{"scrollEn":false}}}` turns it off and is
+  saved (`aux`/`scrEn`, default on).
 - `CPID_FAN1` / `CPID_FAN2` (GPIO 15 / 16, LEDC 10 kHz, on/off): FAN1 on the
   box temperature (`max31855::boxTemperatureC`, else `temperatureRead()`),
   FAN2 on the chip temperature; 3 C hysteresis; no reading -> on.
 Turn-on temperatures and the box warning (`CPID_FAN1_ON_C`, `CPID_FAN2_ON_C`,
 `CPID_BOX_WARN_C`) are saved in NVS namespace `aux`; the Auto/On/Off overrides
-are not (Auto after boot). Data: `"aux"` object; command `auxFans`. Wiring:
+are not (Auto after boot). Data: `"aux"` object; command `auxFans`. The
+Drop/Cooldown button name is a board setting too (`control`/`dropCd`,
+command `dropLabel`, default Drop); only the label changes. Wiring:
 docs/wiring.md.
 
 ## Where things live
@@ -274,7 +281,7 @@ docs/wiring.md.
 | `croaster-control/src/core/` | Pure logic: PID, autotune, profiles, protocol, MAX31855 decoding, probe fault filter, safety rules. The only part the host tests compile |
 | `croaster-control/src/app/controller.*` | The control task |
 | `croaster-control/src/app/ControlPlugin.*` | Commands, data fields, watchdog |
-| `croaster-control/src/app/config_store.*` | NVS settings (gains, PID input, cooldown fan, watchdog, roaster model, fan assist) |
+| `croaster-control/src/app/config_store.*` | NVS settings (gains, PID input, cooldown fan, watchdog, roaster model, fan assist, Drop label) |
 | `croaster-control/src/core/roaster_model.*`, `core/fan_assist.*` | Roaster model from autotune (feedforward, rate-of-rise limit) and fan assist (pure, host tested) |
 | `croaster-control/src/hw/` | SSR, dimmer, PWM fan, thermocouple bus |
 | `croaster-control/src/app/unit_store.*`, `core/temp_unit.h` | Saved temperature unit (NVS `croaster`/`unit`) |

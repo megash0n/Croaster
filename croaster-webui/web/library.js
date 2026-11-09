@@ -38,7 +38,7 @@
     badNotes: 'notes must be text up to ' + MAX_NOTES + ' characters',
     badUnit: 'the unit must be C, F or K',
     badSteps: '1 to ' + MAX_STEPS + ' steps; each needs a duration above 0 and up to ' + MAX_STEP_S +
-      ' s, a setpoint, and fan 0 to 100 % if set',
+      ' s, a setpoint, and Exhaust Fan 0 to 100 % if set',
     badRecipe: 'the recipe is not valid',
     tooLarge: 'the profile is over ' + MAX_BYTES + ' bytes',
     notFound: 'the profile is not on the board',
@@ -137,8 +137,8 @@
   function actionReason(a, unit) {
     if (!isObj(a)) return 'action must be an object';
     if (a.type === 'power' || a.type === 'fan') {
-      if (!(isNum(a.value) && a.value >= 0 && a.value <= 100)) return 'power and fan must be 0..100 %';
-      if (a.type === 'fan') return present(a.ramp) || present(a.shape) ? 'fan does not ramp' : '';
+      if (!(isNum(a.value) && a.value >= 0 && a.value <= 100)) return 'power and Exhaust Fan must be 0..100 %';
+      if (a.type === 'fan') return present(a.ramp) || present(a.shape) ? 'Exhaust Fan does not ramp' : '';
       return rampReason(a);
     }
     if (a.type === 'setpoint') {
@@ -331,7 +331,7 @@
   function describeAction(a, from, to) {
     switch (a.type) {
       case 'power': return 'power ' + a.value + ' %' + rampText(a);
-      case 'fan': return 'exhaust fan ' + a.value + ' %';
+      case 'fan': return 'Exhaust Fan ' + a.value + ' %';
       case 'setpoint':
         return 'setpoint ' + convert(a.value, from, to) + ' \u00b0' + to + rampText(a);
       case 'hold': return 'hold';
@@ -341,7 +341,7 @@
       default: return a.type;
     }
   }
-  // "Step 3 (BT >= 389 °F): fan 50 %, power 60 %"
+  // "Step 3 (BT >= 389 °F): Exhaust Fan 50 %, power 60 %"
   function describeStep(recipe, i, from, to) {
     const s = recipe && recipe.steps && recipe.steps[i];
     if (!s) return 'Step ' + (i + 1);

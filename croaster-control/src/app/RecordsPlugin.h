@@ -12,6 +12,8 @@
 //   {"command":"roastSave","roast":{...},"id":"x"?}
 //       -> response {"ok":true,"id":"x","created":bool,"pruned":["oldest-id",...],
 //          "stock":{"bean":"b","stockG":n}?}
+//     A failed roastSave still lists "pruned" when a roast was deleted to make
+//     room and the new file still could not be written.
 //       Without an id a new roast is added; when 25 are kept the oldest is deleted.
 //       A new roast with "bean" and "greenG" takes the green weight off that
 //       bean's stock ("stockG" -1: the bean records no stock; "error" when it

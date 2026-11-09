@@ -6,6 +6,8 @@
 
 **Current Firmware Version:** `0.52`
 
+This fork also builds **Croaster PID** (`boards/esp32s3-pid`: heater, Exhaust Fan, Cooling Fan, PID, recipes) and **Croaster monitor** (`boards/esp32s3-monitor`: probes and the page). Operator notes are in `docs/user-guide.md`; wiring is in `docs/wiring.md`; decisions are in `docs/design.md`. The stock monitor boards below are unchanged.
+
 ---
 
 ## 📑 Table of Contents

@@ -58,7 +58,7 @@
     if (!plan || !plan.fanTest || !(plan.fanLevels || []).length) return '';
     const n = minutes(plan.fanEstimate);
     return 'Measures how airflow removes heat from the beans: after the PID test points it holds ' +
-      (isNum(plan.fanTarget) ? Math.round(plan.fanTarget) + deg(rep.unit) : 'the middle test point') + ' at fan ' +
+      (isNum(plan.fanTarget) ? Math.round(plan.fanTarget) + deg(rep.unit) : 'the middle test point') + ' at Exhaust Fan ' +
       levelList(plan.fanLevels) + ', then times the heater-off fall at each. The results let the PID ' +
       'compensate for fan changes and use extra fan to shed heat when the beans run ahead of the curve' +
       (n ? '. Adds about ' + n + ' min.' : '.');

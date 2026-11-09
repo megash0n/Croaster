@@ -14,13 +14,19 @@ String finishReply(const JsonDocument& doc) {
     serializeJson(doc, out);
     return out;
 }
-String failure(const char* command, records::Error e, const char* reason = nullptr) {
+String failure(const char* command, records::Error e, const char* reason = nullptr,
+               const std::vector<std::string>* pruned = nullptr) {
     JsonDocument doc;
     JsonObject r = beginReply(doc, command);
     r["ok"] = false;
     r["error"] = proflib::errorCode(e);
     if (reason)
         r["reason"] = reason;
+    if (pruned && !pruned->empty()) {
+        JsonArray p = r["pruned"].to<JsonArray>();
+        for (const std::string& id : *pruned)
+            p.add(id.c_str());
+    }
     return finishReply(doc);
 }
 const char* idOf(const JsonObject& json) {
@@ -113,7 +119,7 @@ String RecordsPlugin::saveRoast(const JsonObject& json) {
     const char* reason = nullptr;
     const records::Error e = roasts_.save(idOf(json), json["roast"].as<JsonObjectConst>(), saved, &reason);
     if (e != records::Error::None)
-        return failure("roastSave", e, reason);
+        return failure("roastSave", e, reason, saved.pruned.empty() ? nullptr : &saved.pruned);
     JsonDocument doc;
     JsonObject r = beginReply(doc, "roastSave");
     r["ok"] = true;

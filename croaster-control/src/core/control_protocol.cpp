@@ -7,8 +7,8 @@
 
 namespace controlproto {
 
-const char* const kNestedKeys[] = {"burner", "fan",         "setpoint", "mode",    "pidInput",
-                                   "pid",    "cooldownFan", "profile",  "watchdog", "fanAssist", "mainsTrip"};
+const char* const kNestedKeys[] = {"burner", "fan",         "setpoint", "mode",      "pidInput",   "pid",
+                                   "cooldownFan", "profile", "watchdog", "fanAssist", "mainsTrip", "dropLabel"};
 const size_t kNestedKeyCount = sizeof(kNestedKeys) / sizeof(kNestedKeys[0]);
 const char* const kBasicNames[] = {"startProfile", "stop", "autotune", "clearTrip", "getControl"};
 const size_t kBasicNameCount = sizeof(kBasicNames) / sizeof(kBasicNames[0]);
@@ -138,6 +138,13 @@ Parsed parseNested(JsonObjectConst c, char unit, const char* only) {
     if (want("mainsTrip") && c["mainsTrip"].is<bool>()) {
         p.hasMainsTrip = true;
         p.mainsTrip = c["mainsTrip"].as<bool>();
+    }
+    if (want("dropLabel") && c["dropLabel"].is<const char*>()) {
+        bool cooldown = false;
+        if (droplabel::parse(c["dropLabel"].as<const char*>(), cooldown)) {
+            p.hasDropLabel = true;
+            p.dropCooldown = cooldown;
+        }
     }
     if (want("profile") && !c["profile"].isNull()) {
         p.hasProfile = p.profile.loadJson(c["profile"].as<JsonArrayConst>(), unit);

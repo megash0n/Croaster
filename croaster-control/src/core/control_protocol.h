@@ -21,6 +21,7 @@
 //                                            field alone works; timeout 2..600 s
 //   {"command":{"fanAssist":true|false}}    fan assist option (fan_assist.h), saved to NVS
 //   {"command":{"mainsTrip":true|false}}    AC dimmer: heater trips when mains is lost, saved to NVS
+//   {"command":{"dropLabel":"Drop"|"Cooldown"}}  Drop event name on the page (drop_label.h), saved to NVS
 //   {"command":{"profile":[{"duration":s,"setpoint":T,"interpolation":"ease-out","fanValue":%},...]}}
 //                                            limits in RoastProfile::loadJson
 // Basic:
@@ -40,6 +41,7 @@
 #include <cstddef>
 
 #include "control_types.h"
+#include "drop_label.h"
 #include "roast_profile.h"
 
 namespace controlproto {
@@ -78,6 +80,8 @@ struct Parsed {
     bool fanAssist = false;
     bool hasMainsTrip = false; // persist this (AC dimmer builds only)
     bool mainsTrip = true;
+    bool hasDropLabel = false; // persist this (page label only; the event code stays DROP)
+    bool dropCooldown = false;
 };
 
 // `cmd` is the object under "command"; `unit` is Croaster's unit ('C','F','K').

@@ -119,6 +119,7 @@ test** checkbox (on by default); the time follows the checkbox.
 The results dialog opens when results are waiting, including after a reload.
 Live: the current test point is drawn as a dashed line while recording, and
 the fan tile shows the fan assist extra. Controls > PID: Fan assist toggle.
+Fan assist stays at 0 while the setpoint is off.
 
 The page asks `getAutotune` on connect, when the telemetry `autotune` text
 changes, every 3 s while running and every 10 s while results wait. These
